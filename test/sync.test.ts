@@ -231,12 +231,12 @@ describe('performSync dry-run never writes', () => {
       'Bob is another person.',
     ].join('\n'));
     execSync('git add -A && git commit -m "initial"', { cwd: repoPath, stdio: 'pipe' });
-  });
+  }, 30_000);
 
   afterEach(async () => {
     await engine.disconnect();
     if (repoPath) rmSync(repoPath, { recursive: true, force: true });
-  });
+  }, 30_000);
 
   test('first-sync dry-run does NOT write to DB or advance the bookmark', async () => {
     const { performSync } = await import('../src/commands/sync.ts');
@@ -260,7 +260,7 @@ describe('performSync dry-run never writes', () => {
     // Bookmark NOT set — this is the regression the guard enforces.
     expect(await engine.getConfig('sync.last_commit')).toBeNull();
     expect(await engine.getConfig('sync.repo_path')).toBeNull();
-  });
+  }, 30_000);
 
   test('incremental dry-run does NOT write to DB or advance the bookmark', async () => {
     const { performSync } = await import('../src/commands/sync.ts');
@@ -307,7 +307,7 @@ describe('performSync dry-run never writes', () => {
     // Bookmark unchanged — still at the pre-carol commit.
     const bookmarkAfterDry = await engine.getConfig('sync.last_commit');
     expect(bookmarkAfterDry).toBe(bookmarkAfterReal);
-  });
+  }, 30_000);
 
   test('full-sync (--full) dry-run does NOT write to DB or advance the bookmark', async () => {
     const { performSync } = await import('../src/commands/sync.ts');
@@ -337,7 +337,7 @@ describe('performSync dry-run never writes', () => {
     // Bookmark unchanged.
     const bookmarkAfter = await engine.getConfig('sync.last_commit');
     expect(bookmarkAfter).toBe(bookmarkBefore);
-  });
+  }, 30_000);
 
   test('SyncResult exposes embedded count field', async () => {
     const { performSync } = await import('../src/commands/sync.ts');
@@ -349,7 +349,7 @@ describe('performSync dry-run never writes', () => {
     });
     // Structural assertion: the contract includes `embedded: number`.
     expect(typeof result.embedded).toBe('number');
-  });
+  }, 30_000);
 });
 
 describe('sync regression — #132 nested transaction deadlock', () => {

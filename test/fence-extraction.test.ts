@@ -10,6 +10,8 @@ import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
 import { PGLiteEngine } from '../src/core/pglite-engine.ts';
 import { importFromContent } from '../src/core/import-file.ts';
 
+const PGLITE_PARALLEL_TIMEOUT_MS = 30_000;
+
 describe('Layer 8 D2 — markdown fence extraction', () => {
   let engine: PGLiteEngine;
 
@@ -17,11 +19,11 @@ describe('Layer 8 D2 — markdown fence extraction', () => {
     engine = new PGLiteEngine();
     await engine.connect({});
     await engine.initSchema();
-  });
+  }, PGLITE_PARALLEL_TIMEOUT_MS);
 
   afterAll(async () => {
     await engine.disconnect();
-  }, 30_000);
+  }, PGLITE_PARALLEL_TIMEOUT_MS);
 
   test('TypeScript fence becomes a fenced_code chunk with language=typescript', async () => {
     const md = `# Guide
@@ -41,7 +43,7 @@ More prose.`;
     const fenceChunks = chunks.filter(c => c.chunk_source === 'fenced_code');
     expect(fenceChunks.length).toBeGreaterThan(0);
     expect(fenceChunks[0]!.language).toBe('typescript');
-  });
+  }, PGLITE_PARALLEL_TIMEOUT_MS);
 
   test('Python fence → language=python, chunk_text contains the def', async () => {
     const md = `Docs.
@@ -57,7 +59,7 @@ def greet(name):
     expect(fenceChunks.length).toBeGreaterThan(0);
     expect(fenceChunks[0]!.language).toBe('python');
     expect(fenceChunks[0]!.chunk_text).toMatch(/def greet/);
-  });
+  }, PGLITE_PARALLEL_TIMEOUT_MS);
 
   test('Ruby fence → language=ruby', async () => {
     const md = `\`\`\`ruby
@@ -70,7 +72,7 @@ end
     const fenceChunks = chunks.filter(c => c.chunk_source === 'fenced_code');
     expect(fenceChunks.length).toBeGreaterThan(0);
     expect(fenceChunks[0]!.language).toBe('ruby');
-  });
+  }, PGLITE_PARALLEL_TIMEOUT_MS);
 
   test('unknown fence tag produces zero fenced_code chunks (graceful fallback)', async () => {
     const md = `Intro.
@@ -88,7 +90,7 @@ do stuff
     const fenceChunks = chunks.filter(c => c.chunk_source === 'fenced_code');
     // No extraction — no chunks with fenced_code source. Prose still chunks normally.
     expect(fenceChunks.length).toBe(0);
-  });
+  }, PGLITE_PARALLEL_TIMEOUT_MS);
 
   test('missing fence language tag → no fenced_code chunks', async () => {
     const md = `Intro.
@@ -100,7 +102,7 @@ some ambiguous code
     const chunks = await engine.getChunks('guides/fence-no-tag');
     const fenceChunks = chunks.filter(c => c.chunk_source === 'fenced_code');
     expect(fenceChunks.length).toBe(0);
-  });
+  }, PGLITE_PARALLEL_TIMEOUT_MS);
 
   test('multiple fences on one page all extract (under cap)', async () => {
     const md = `
@@ -127,7 +129,7 @@ echo hi
     expect(langs.has('typescript')).toBe(true);
     expect(langs.has('python')).toBe(true);
     expect(langs.has('bash')).toBe(true);
-  });
+  }, PGLITE_PARALLEL_TIMEOUT_MS);
 
   test('empty fence body is skipped (no chunks)', async () => {
     const md = "Intro.\n\n```ts\n```\n";
@@ -135,5 +137,5 @@ echo hi
     const chunks = await engine.getChunks('guides/fence-empty');
     const fenceChunks = chunks.filter(c => c.chunk_source === 'fenced_code');
     expect(fenceChunks.length).toBe(0);
-  });
+  }, PGLITE_PARALLEL_TIMEOUT_MS);
 });

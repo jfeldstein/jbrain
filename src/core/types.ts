@@ -179,6 +179,27 @@ export interface SearchOpts {
    * undefined to search all sources.
    */
   sourceId?: string;
+
+  /**
+   * Entity-graph expansion for hybrid retrieval. Resolved by
+   * resolveEntityWalkDepth() using the rollout gate + query intent.
+   */
+  entityWalkDepth?: 0 | 1 | 2;
+  /** Edge traversal policy for entity graph expansion. */
+  entityWalkEdgePolicy?: EntityWalkEdgePolicy;
+}
+
+export type EntityWalkEdgePolicy = 'intent_based' | 'typed_only' | 'all';
+
+/** Keyword search restricted to slug allowlist (chunk-grain). Used by entity-graph hydration. */
+export type SearchKeywordScopedOpts = SearchOpts & { perSlugCap?: number };
+
+/** Options for source-scoped multi-hop link traversal (`traversePathsScoped`). */
+export interface TraversePathsScopedOpts {
+  depth?: 1 | 2;
+  direction?: 'in' | 'out' | 'both';
+  linkTypes?: string[];
+  sourceId: string;
 }
 
 /**

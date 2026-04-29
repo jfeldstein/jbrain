@@ -16,6 +16,8 @@ import { importCodeFile } from '../src/core/import-file.ts';
 import { findCodeDef } from '../src/commands/code-def.ts';
 import { findCodeRefs } from '../src/commands/code-refs.ts';
 
+const PGLITE_HOOK_MS = 30_000;
+
 let engine: PGLiteEngine;
 
 beforeAll(async () => {
@@ -144,11 +146,11 @@ export async function performDump(engine: BrainEngine, slug: string): Promise<Br
 `;
   await importCodeFile(engine, 'src/engine.ts', brainEngineSrc, { noEmbed: true });
   await importCodeFile(engine, 'src/sync.ts', consumerSrc, { noEmbed: true });
-});
+}, PGLITE_HOOK_MS);
 
 afterAll(async () => {
   await engine.disconnect();
-});
+}, PGLITE_HOOK_MS);
 
 describe('findCodeDef', () => {
   test('finds the definition of an interface', async () => {

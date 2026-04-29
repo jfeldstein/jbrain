@@ -40,6 +40,8 @@ let engine: PGLiteEngine;
 let originalHome: string | undefined;
 const originalContents = new Map<string, string>();
 
+const PGLITE_HOOK_MS = 30_000;
+
 beforeAll(async () => {
   workdir = mkdtempSync(join(tmpdir(), 'fm-migration-e2e-'));
   tmpHome = join(workdir, 'home');
@@ -92,7 +94,7 @@ beforeAll(async () => {
   // mutations.
   originalHome = process.env.HOME;
   process.env.HOME = tmpHome;
-});
+}, PGLITE_HOOK_MS);
 
 afterAll(async () => {
   __setTestEngineOverride(null);
@@ -100,7 +102,7 @@ afterAll(async () => {
   if (originalHome === undefined) delete process.env.HOME;
   else process.env.HOME = originalHome;
   rmSync(workdir, { recursive: true, force: true });
-});
+}, PGLITE_HOOK_MS);
 
 describe('E2E: v0.22.4 frontmatter-guard migration', () => {
   test('orchestrator runs end-to-end and produces the expected artifacts', async () => {

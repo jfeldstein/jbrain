@@ -15,6 +15,8 @@ import { runExtractCore } from '../src/commands/extract.ts';
 import { PGLiteEngine } from '../src/core/pglite-engine.ts';
 import type { BrainEngine } from '../src/core/engine.ts';
 
+const PGLITE_PARALLEL_TIMEOUT_MS = 30_000;
+
 let engine: PGLiteEngine;
 let tempDir: string;
 
@@ -25,12 +27,12 @@ beforeEach(async () => {
   tempDir = mkdtempSync(join(tmpdir(), 'gbrain-extract-test-'));
   mkdirSync(join(tempDir, 'people'), { recursive: true });
   mkdirSync(join(tempDir, 'companies'), { recursive: true });
-});
+}, PGLITE_PARALLEL_TIMEOUT_MS);
 
 afterEach(async () => {
   await engine.disconnect();
   rmSync(tempDir, { recursive: true, force: true });
-});
+}, PGLITE_PARALLEL_TIMEOUT_MS);
 
 async function seedPage(slug: string, body: string): Promise<void> {
   const [type, name] = slug.split('/');
@@ -59,7 +61,7 @@ describe('runExtractCore — incremental cycle path (#417)', () => {
     expect(result.links_created).toBe(0);
     expect(result.timeline_entries_created).toBe(0);
     expect(result.pages_processed).toBe(0);
-  });
+  }, PGLITE_PARALLEL_TIMEOUT_MS);
 
   test('2. slugs: undefined falls through to full-walk path', async () => {
     await seedPage('people/alice-example', '# alice\n\n[bob](people/bob-example)');
@@ -70,7 +72,7 @@ describe('runExtractCore — incremental cycle path (#417)', () => {
     });
     // Full walk processes everything found on disk
     expect(result.pages_processed).toBeGreaterThan(0);
-  });
+  }, PGLITE_PARALLEL_TIMEOUT_MS);
 
   test('3. slugs: [a, b] reads only those two files (incremental processing)', async () => {
     await seedPage('people/alice-example', '# alice');
@@ -83,7 +85,7 @@ describe('runExtractCore — incremental cycle path (#417)', () => {
     });
     // Only 2 files processed even though 3 exist on disk
     expect(result.pages_processed).toBe(2);
-  });
+  }, PGLITE_PARALLEL_TIMEOUT_MS);
 
   test('4. Slug whose file no longer exists is silently skipped', async () => {
     await seedPage('people/alice-example', '# alice');
@@ -95,7 +97,7 @@ describe('runExtractCore — incremental cycle path (#417)', () => {
     });
     // alice processed; ghost skipped (no file)
     expect(result.pages_processed).toBe(1);
-  });
+  }, PGLITE_PARALLEL_TIMEOUT_MS);
 
   test('5. mode: links skips timeline extraction in incremental', async () => {
     const body = '# alice\n\n## Timeline\n- 2026-01-01: started';
@@ -107,7 +109,7 @@ describe('runExtractCore — incremental cycle path (#417)', () => {
     });
     // Timeline extraction skipped even though body contains a timeline
     expect(result.timeline_entries_created).toBe(0);
-  });
+  }, PGLITE_PARALLEL_TIMEOUT_MS);
 
   test('6. dryRun: true does not invoke addLinksBatch / addTimelineEntriesBatch', async () => {
     await seedPage('people/alice-example', '# alice\n\n[bob](people/bob-example)');
@@ -135,7 +137,7 @@ describe('runExtractCore — incremental cycle path (#417)', () => {
 
     expect(linksBatchCalled).toBe(false);
     expect(timelineBatchCalled).toBe(false);
-  });
+  }, PGLITE_PARALLEL_TIMEOUT_MS);
 
   test('7. BATCH_SIZE flush — slugs producing >100 candidate links exercise the mid-iteration flush', async () => {
     // BATCH_SIZE in extract.ts is 100. Create one slug with 150 outbound links.
@@ -157,7 +159,7 @@ describe('runExtractCore — incremental cycle path (#417)', () => {
     // No exception means the flush path executed cleanly.
     expect(result.pages_processed).toBe(1);
     expect(result.links_created).toBeGreaterThanOrEqual(0); // Just confirms the flush path didn't blow up
-  });
+  }, PGLITE_PARALLEL_TIMEOUT_MS);
 
   test('8. Full-slug-set resolution — slug references file outside changed set', async () => {
     // alice references bob, but only alice is in the incremental slugs list.
@@ -178,5 +180,5 @@ describe('runExtractCore — incremental cycle path (#417)', () => {
     expect(result.pages_processed).toBe(1);
     // Link from alice to bob was extracted successfully via the full allSlugs set
     expect(result.links_created).toBeGreaterThan(0);
-  });
+  }, PGLITE_PARALLEL_TIMEOUT_MS);
 });

@@ -19,6 +19,8 @@ import { MinionQueue } from '../../src/core/minions/queue.ts';
 import { MinionWorker } from '../../src/core/minions/worker.ts';
 import { registerBuiltinHandlers } from '../../src/commands/jobs.ts';
 
+const PGLITE_HOOK_MS = 30_000;
+
 let engine: PGLiteEngine;
 let originalAllowShellJobs: string | undefined;
 
@@ -43,7 +45,7 @@ beforeAll(async () => {
   engine = new PGLiteEngine();
   await engine.connect({}); // in-memory PGLite
   await engine.initSchema(); // installs pages, minion_jobs, config, etc.
-});
+}, PGLITE_HOOK_MS);
 
 afterAll(async () => {
   await engine.disconnect();
@@ -52,7 +54,7 @@ afterAll(async () => {
   } else {
     process.env.GBRAIN_ALLOW_SHELL_JOBS = originalAllowShellJobs;
   }
-});
+}, PGLITE_HOOK_MS);
 
 describe('E2E: Minions shell handler on PGLite (--follow inline path)', () => {
   // Mirror the Postgres sibling's per-test reset. The engine is shared across
@@ -61,7 +63,7 @@ describe('E2E: Minions shell handler on PGLite (--follow inline path)', () => {
   beforeEach(async () => {
     const db = (engine as any).db;
     await db.exec(`DELETE FROM minion_attachments; DELETE FROM minion_inbox; DELETE FROM minion_jobs;`);
-  });
+  }, PGLITE_HOOK_MS);
 
   test('submit → worker registered via registerBuiltinHandlers → shell runs → completes', async () => {
     const queue = new MinionQueue(engine);

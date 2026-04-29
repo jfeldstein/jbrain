@@ -12,6 +12,8 @@ import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
 import { PGLiteEngine } from '../src/core/pglite-engine.ts';
 import { runReconcileLinks } from '../src/commands/reconcile-links.ts';
 
+const PGLITE_PARALLEL_TIMEOUT_MS = 30_000;
+
 describe('Layer 8 D3 — reconcile-links', () => {
   let engine: PGLiteEngine;
 
@@ -43,11 +45,11 @@ describe('Layer 8 D3 — reconcile-links', () => {
       compiled_truth: 'module exports go here',
       timeline: '',
     });
-  });
+  }, PGLITE_PARALLEL_TIMEOUT_MS);
 
   afterAll(async () => {
     await engine.disconnect();
-  }, 30_000);
+  }, PGLITE_PARALLEL_TIMEOUT_MS);
 
   test('extracts code refs and creates bidirectional edges', async () => {
     const result = await runReconcileLinks(engine);
@@ -64,7 +66,7 @@ describe('Layer 8 D3 — reconcile-links', () => {
 
     const codeBacklinks = await engine.getBacklinks('src-core-sync-ts');
     expect(codeBacklinks.map(l => l.from_slug)).toContain('guides/sync-internals');
-  });
+  }, PGLITE_PARALLEL_TIMEOUT_MS);
 
   test('is idempotent — second run inserts zero new edges (ON CONFLICT DO NOTHING)', async () => {
     const before = await engine.getLinks('guides/sync-internals');
@@ -73,7 +75,7 @@ describe('Layer 8 D3 — reconcile-links', () => {
     const after = await engine.getLinks('guides/sync-internals');
     // Same edge count, same edges (ON CONFLICT DO NOTHING at the SQL layer).
     expect(after.length).toBe(before.length);
-  });
+  }, PGLITE_PARALLEL_TIMEOUT_MS);
 
   test('dry-run reports counts without writing', async () => {
     // Add a new markdown page with a ref, run dry-run, verify no new edges.
@@ -91,7 +93,7 @@ describe('Layer 8 D3 — reconcile-links', () => {
     expect(result.edgesAttempted).toBe(0);
     const afterLinks = await engine.getLinks('guides/dry-run-test');
     expect(afterLinks.length).toBe(beforeLinks.length);
-  });
+  }, PGLITE_PARALLEL_TIMEOUT_MS);
 
   test('markdown page with no code refs is a no-op', async () => {
     await engine.putPage('guides/no-refs', {
@@ -104,7 +106,7 @@ describe('Layer 8 D3 — reconcile-links', () => {
     await runReconcileLinks(engine);
     const after = await engine.getLinks('guides/no-refs');
     expect(after.length).toBe(before.length);
-  });
+  }, PGLITE_PARALLEL_TIMEOUT_MS);
 
   test('respects auto_link=false', async () => {
     await engine.setConfig('auto_link', 'false');
@@ -112,7 +114,7 @@ describe('Layer 8 D3 — reconcile-links', () => {
     expect(result.status).toBe('auto_link_disabled');
     expect(result.markdownPagesScanned).toBe(0);
     await engine.setConfig('auto_link', 'true');
-  });
+  }, PGLITE_PARALLEL_TIMEOUT_MS);
 
   test('missing code target is counted, not thrown', async () => {
     // Create a guide citing a code file that doesn't exist.
@@ -127,5 +129,5 @@ describe('Layer 8 D3 — reconcile-links', () => {
     // The ref was found, attempt was made, but inner JOIN drops silently.
     // In PGLite that's counted as edgesAttempted without an error.
     expect(result.codeRefsFound).toBeGreaterThan(0);
-  });
+  }, PGLITE_PARALLEL_TIMEOUT_MS);
 });

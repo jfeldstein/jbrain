@@ -9,17 +9,20 @@ import { PGLiteEngine } from '../src/core/pglite-engine.ts';
 import type { BrainEngine } from '../src/core/engine.ts';
 import type { PageInput, ChunkInput } from '../src/core/types.ts';
 
+/** Parallel CI contention can exceed Bun's default 5s hook budget for PGLite + truncate. */
+const PGLITE_HOOK_MS = 30_000;
+
 let engine: PGLiteEngine;
 
 beforeAll(async () => {
   engine = new PGLiteEngine();
   await engine.connect({}); // in-memory
   await engine.initSchema();
-});
+}, PGLITE_HOOK_MS);
 
 afterAll(async () => {
   await engine.disconnect();
-});
+}, PGLITE_HOOK_MS);
 
 // Helper to reset data between test groups
 async function truncateAll() {
@@ -43,7 +46,7 @@ const testPage: PageInput = {
 // Pages CRUD
 // ─────────────────────────────────────────────────────────────────
 describe('PGLiteEngine: Pages', () => {
-  beforeEach(truncateAll);
+  beforeEach(truncateAll, PGLITE_HOOK_MS);
 
   test('putPage + getPage round trip', async () => {
     const page = await engine.putPage('test/hello', testPage);
@@ -154,8 +157,16 @@ describe('PGLiteEngine: Search', () => {
     });
     await engine.upsertChunks('concepts/rag', [
       { chunk_index: 0, chunk_text: 'RAG combines retrieval with generation', chunk_source: 'compiled_truth' },
+      { chunk_index: 1, chunk_text: 'RAG improves answer quality via retrieval', chunk_source: 'compiled_truth' },
     ]);
-  });
+    await engine.putPage('notes/other', {
+      type: 'note', title: 'Other',
+      compiled_truth: 'Unrelated note about something else.',
+    });
+    await engine.upsertChunks('notes/other', [
+      { chunk_index: 0, chunk_text: 'Unrelated note about something else', chunk_source: 'compiled_truth' },
+    ]);
+  }, PGLITE_HOOK_MS);
 
   test('searchKeyword returns results for matching term', async () => {
     const results = await engine.searchKeyword('NovaMind');
@@ -166,6 +177,26 @@ describe('PGLiteEngine: Search', () => {
   test('searchKeyword returns empty for non-matching term', async () => {
     const results = await engine.searchKeyword('xyznonexistent');
     expect(results.length).toBe(0);
+  });
+
+  test('searchKeywordScoped: empty slug list returns []', async () => {
+    const results = await engine.searchKeywordScoped('RAG', []);
+    expect(results).toEqual([]);
+  });
+
+  test('searchKeywordScoped: only returns results from the scoped slug set', async () => {
+    const results = await engine.searchKeywordScoped('NovaMind', ['concepts/rag']);
+    expect(results).toEqual([]);
+
+    const results2 = await engine.searchKeywordScoped('RAG', ['concepts/rag']);
+    expect(results2.length).toBeGreaterThan(0);
+    expect(new Set(results2.map(r => r.slug))).toEqual(new Set(['concepts/rag']));
+  });
+
+  test('searchKeywordScoped: enforces perSlugCap via windowing', async () => {
+    const results = await engine.searchKeywordScoped('RAG', ['concepts/rag'], { perSlugCap: 1, limit: 10 });
+    expect(results.length).toBe(1);
+    expect(results[0]!.slug).toBe('concepts/rag');
   });
 
   test('tsvector trigger populates search_vector on insert', async () => {
@@ -190,7 +221,7 @@ describe('PGLiteEngine: Search', () => {
 // Chunks
 // ─────────────────────────────────────────────────────────────────
 describe('PGLiteEngine: Chunks', () => {
-  beforeEach(truncateAll);
+  beforeEach(truncateAll, PGLITE_HOOK_MS);
 
   test('upsertChunks + getChunks round trip', async () => {
     await engine.putPage('test/chunks', testPage);
@@ -258,7 +289,7 @@ describe('PGLiteEngine: Links', () => {
     await engine.putPage('people/alice', { ...testPage, type: 'person', title: 'Alice' });
     await engine.putPage('companies/acme', { ...testPage, type: 'company', title: 'ACME' });
     await engine.putPage('companies/beta', { ...testPage, type: 'company', title: 'Beta' });
-  });
+  }, PGLITE_HOOK_MS);
 
   test('addLink + getLinks', async () => {
     await engine.addLink('people/alice', 'companies/acme', 'works at', 'employment');
@@ -300,7 +331,7 @@ describe('PGLiteEngine: Tags', () => {
   beforeEach(async () => {
     await truncateAll();
     await engine.putPage('test/tags', testPage);
-  });
+  }, PGLITE_HOOK_MS);
 
   test('addTag + getTags', async () => {
     await engine.addTag('test/tags', 'alpha');
@@ -331,7 +362,7 @@ describe('PGLiteEngine: Timeline', () => {
   beforeEach(async () => {
     await truncateAll();
     await engine.putPage('test/timeline', testPage);
-  });
+  }, PGLITE_HOOK_MS);
 
   test('addTimelineEntry + getTimeline', async () => {
     await engine.addTimelineEntry('test/timeline', {
@@ -364,7 +395,7 @@ describe('PGLiteEngine: addLinksBatch', () => {
     await engine.putPage('a', { type: 'concept', title: 'A', compiled_truth: '', timeline: '' });
     await engine.putPage('b', { type: 'concept', title: 'B', compiled_truth: '', timeline: '' });
     await engine.putPage('c', { type: 'concept', title: 'C', compiled_truth: '', timeline: '' });
-  });
+  }, PGLITE_HOOK_MS);
 
   test('empty batch returns 0 with no DB call', async () => {
     expect(await engine.addLinksBatch([])).toBe(0);
@@ -422,7 +453,7 @@ describe('PGLiteEngine: addTimelineEntriesBatch', () => {
     await truncateAll();
     await engine.putPage('p1', { type: 'concept', title: 'P1', compiled_truth: '', timeline: '' });
     await engine.putPage('p2', { type: 'concept', title: 'P2', compiled_truth: '', timeline: '' });
-  });
+  }, PGLITE_HOOK_MS);
 
   test('empty batch returns 0', async () => {
     expect(await engine.addTimelineEntriesBatch([])).toBe(0);
@@ -490,7 +521,7 @@ describe('PGLiteEngine: batch ops source-awareness (v0.18.0)', () => {
        VALUES ('topics/ai', 'concept', 'AI (alt)', '', '', '{}'::jsonb, 'h1', 'alt', now()),
               ('topics/ml', 'concept', 'ML (alt)', '', '', '{}'::jsonb, 'h2', 'alt', now())`
     );
-  });
+  }, PGLITE_HOOK_MS);
 
   test('addLinksBatch default source_id does NOT fan out across sources', async () => {
     const inserted = await engine.addLinksBatch([
@@ -587,7 +618,7 @@ describe('PGLiteEngine: RawData', () => {
   beforeEach(async () => {
     await truncateAll();
     await engine.putPage('test/raw', testPage);
-  });
+  }, PGLITE_HOOK_MS);
 
   test('putRawData + getRawData', async () => {
     await engine.putRawData('test/raw', 'crunchbase', { funding: '$10M' });
@@ -601,7 +632,7 @@ describe('PGLiteEngine: Versions', () => {
   beforeEach(async () => {
     await truncateAll();
     await engine.putPage('test/version', testPage);
-  });
+  }, PGLITE_HOOK_MS);
 
   test('createVersion + getVersions', async () => {
     const v = await engine.createVersion('test/version');
@@ -659,7 +690,7 @@ describe('PGLiteEngine: Stats & Health', () => {
       { chunk_index: 0, chunk_text: 'chunk', chunk_source: 'compiled_truth' },
     ]);
     await engine.addTag('test/stats', 'stat-tag');
-  });
+  }, PGLITE_HOOK_MS);
 
   test('getStats returns correct counts', async () => {
     const stats = await engine.getStats();
@@ -681,7 +712,7 @@ describe('PGLiteEngine: Stats & Health', () => {
 // Transactions
 // ─────────────────────────────────────────────────────────────────
 describe('PGLiteEngine: Transactions', () => {
-  beforeEach(truncateAll);
+  beforeEach(truncateAll, PGLITE_HOOK_MS);
 
   test('transaction commits on success', async () => {
     await engine.transaction(async (tx) => {
@@ -734,7 +765,7 @@ describe('PGLiteEngine: getAllSlugs', () => {
     await engine.putPage('people/alice', { ...testPage, type: 'person', title: 'Alice' });
     await engine.putPage('people/bob', { ...testPage, type: 'person', title: 'Bob' });
     await engine.putPage('companies/acme', { ...testPage, type: 'company', title: 'Acme' });
-  });
+  }, PGLITE_HOOK_MS);
 
   test('returns Set of all page slugs', async () => {
     const slugs = await engine.getAllSlugs();
@@ -754,7 +785,7 @@ describe('PGLiteEngine: getAllSlugs', () => {
 describe('PGLiteEngine: listPages updated_after filter', () => {
   beforeEach(async () => {
     await truncateAll();
-  });
+  }, PGLITE_HOOK_MS);
 
   test('filters pages by updated_at > given date', async () => {
     await engine.putPage('test/old', testPage);
@@ -783,7 +814,7 @@ describe('PGLiteEngine: Multi-type links (v5 migration)', () => {
     await truncateAll();
     await engine.putPage('people/alice', { ...testPage, type: 'person', title: 'Alice' });
     await engine.putPage('companies/acme', { ...testPage, type: 'company', title: 'Acme' });
-  });
+  }, PGLITE_HOOK_MS);
 
   test('same (from, to) with different link_types both stored', async () => {
     await engine.addLink('people/alice', 'companies/acme', 'CEO', 'works_at');
@@ -824,7 +855,7 @@ describe('PGLiteEngine: Timeline dedup constraint (v6 migration)', () => {
   beforeEach(async () => {
     await truncateAll();
     await engine.putPage('test/timeline-dedup', testPage);
-  });
+  }, PGLITE_HOOK_MS);
 
   test('inserting same (date, summary) twice is silent no-op (idempotent)', async () => {
     await engine.addTimelineEntry('test/timeline-dedup', { date: '2026-01-15', summary: 'Event A' });
@@ -862,7 +893,7 @@ describe('PGLiteEngine: getBacklinkCounts', () => {
     await engine.putPage('people/alice', { ...testPage, type: 'person', title: 'Alice' });
     await engine.putPage('people/bob', { ...testPage, type: 'person', title: 'Bob' });
     await engine.putPage('companies/acme', { ...testPage, type: 'company', title: 'Acme' });
-  });
+  }, PGLITE_HOOK_MS);
 
   test('returns Map<slug, count> for given slugs', async () => {
     await engine.addLink('people/alice', 'companies/acme', '', 'works_at');
@@ -897,7 +928,7 @@ describe('PGLiteEngine: traversePaths (v0.10.1)', () => {
     await engine.addLink('meetings/standup', 'people/carol', '', 'attended');
     await engine.addLink('people/alice', 'companies/acme', '', 'works_at');
     await engine.addLink('people/bob', 'companies/acme', '', 'invested_in');
-  });
+  }, PGLITE_HOOK_MS);
 
   test('out direction (default): follows from->to edges', async () => {
     const paths = await engine.traversePaths('meetings/standup', { depth: 1 });
@@ -935,6 +966,48 @@ describe('PGLiteEngine: traversePaths (v0.10.1)', () => {
   });
 });
 
+describe('PGLiteEngine: traversePathsScoped (entity graph RAG)', () => {
+  beforeEach(async () => {
+    await truncateAll();
+    const db = (engine as any).db;
+    await db.query(
+      `INSERT INTO sources (id, name) VALUES ('alt', 'alt')
+       ON CONFLICT (id) DO NOTHING`
+    );
+
+    // Default source pages (via putPage).
+    await engine.putPage('people/alice', { ...testPage, type: 'person', title: 'Alice (default)' });
+    await engine.putPage('companies/default-only', { ...testPage, type: 'company', title: 'DefaultCo' });
+    await engine.addLink('people/alice', 'companies/default-only', '', 'works_at');
+
+    // Alt source pages + link (raw SQL to set source_id).
+    await db.query(
+      `INSERT INTO pages (slug, type, title, compiled_truth, timeline, frontmatter, content_hash, source_id, updated_at)
+       VALUES
+         ('people/alice', 'person', 'Alice (alt)', '', '', '{}'::jsonb, 'h1', 'alt', now()),
+         ('companies/alt-only', 'company', 'AltCo', '', '', '{}'::jsonb, 'h2', 'alt', now())`
+    );
+
+    const { rows: [aAlt] } = await db.query(`SELECT id FROM pages WHERE slug = 'people/alice' AND source_id = 'alt'`);
+    const { rows: [cAlt] } = await db.query(`SELECT id FROM pages WHERE slug = 'companies/alt-only' AND source_id = 'alt'`);
+    await db.query(
+      `INSERT INTO links (from_page_id, to_page_id, link_type, context, link_source)
+       VALUES ($1, $2, 'works_at', '', 'markdown')`,
+      [aAlt.id, cAlt.id],
+    );
+  }, PGLITE_HOOK_MS);
+
+  test('source-scoped traversal does not bleed across sources for same slug', async () => {
+    const paths = await engine.traversePathsScoped('people/alice', {
+      depth: 1,
+      direction: 'out',
+      sourceId: 'alt',
+    });
+    expect(paths.length).toBe(1);
+    expect(paths[0]!.to_slug).toBe('companies/alt-only');
+  });
+});
+
 describe('PGLiteEngine: traverseGraph cycle prevention', () => {
   beforeEach(async () => {
     await truncateAll();
@@ -943,7 +1016,7 @@ describe('PGLiteEngine: traverseGraph cycle prevention', () => {
     // Create a 2-cycle: A -> B -> A
     await engine.addLink('people/a', 'people/b', '', 'mentions');
     await engine.addLink('people/b', 'people/a', '', 'mentions');
-  });
+  }, PGLITE_HOOK_MS);
 
   test('does not amplify on cyclic graphs', async () => {
     // Without cycle prevention, depth 5 on a 2-cycle would loop indefinitely
@@ -968,7 +1041,7 @@ describe('PGLiteEngine: getHealth graph metrics', () => {
     await engine.putPage('people/alice', { ...testPage, type: 'person', title: 'Alice' });
     await engine.putPage('people/bob', { ...testPage, type: 'person', title: 'Bob' });
     await engine.putPage('companies/acme', { ...testPage, type: 'company', title: 'Acme' });
-  });
+  }, PGLITE_HOOK_MS);
 
   test('link_coverage = 0 when no links exist', async () => {
     const h = await engine.getHealth();
@@ -980,6 +1053,14 @@ describe('PGLiteEngine: getHealth graph metrics', () => {
     // 1 of 3 entity pages has inbound links -> 33%.
     await engine.addLink('people/alice', 'companies/acme', '', 'works_at');
     const h = await engine.getHealth();
+    expect(h.link_coverage).toBeCloseTo(1 / 3, 2);
+  });
+
+  test('link_coverage ignores non-entity page types in denominator', async () => {
+    await engine.putPage('concepts/market-map', { ...testPage, type: 'concept', title: 'Market Map' });
+    await engine.addLink('people/alice', 'companies/acme', '', 'works_at');
+    const h = await engine.getHealth();
+    // Still 1/3: concept pages are not part of entity coverage.
     expect(h.link_coverage).toBeCloseTo(1 / 3, 2);
   });
 

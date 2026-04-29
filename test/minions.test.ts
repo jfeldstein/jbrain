@@ -7,6 +7,8 @@ import { calculateBackoff } from '../src/core/minions/backoff.ts';
 import { UnrecoverableError } from '../src/core/minions/types.ts';
 import type { MinionJob } from '../src/core/minions/types.ts';
 
+const PGLITE_HOOK_MS = 30_000;
+
 let engine: PGLiteEngine;
 let queue: MinionQueue;
 
@@ -15,15 +17,15 @@ beforeAll(async () => {
   await engine.connect({ database_url: '' }); // in-memory
   await engine.initSchema();
   queue = new MinionQueue(engine);
-});
+}, PGLITE_HOOK_MS);
 
 afterAll(async () => {
   await engine.disconnect();
-});
+}, PGLITE_HOOK_MS);
 
 beforeEach(async () => {
   await engine.executeRaw('DELETE FROM minion_jobs');
-});
+}, PGLITE_HOOK_MS);
 
 // --- Queue CRUD (9 tests) ---
 
@@ -687,7 +689,7 @@ describe('MinionQueue: Pause/Resume', () => {
 describe('MinionQueue: Inbox', () => {
   beforeEach(async () => {
     await engine.executeRaw('DELETE FROM minion_inbox');
-  });
+  }, PGLITE_HOOK_MS);
 
   test('send message to active job from admin', async () => {
     const job = await queue.add('sync', {});
@@ -1395,7 +1397,7 @@ describe('MinionQueue: Idempotency', () => {
 describe('MinionQueue: child_done', () => {
   beforeEach(async () => {
     await engine.executeRaw('DELETE FROM minion_inbox');
-  });
+  }, PGLITE_HOOK_MS);
 
   test('child completion posts child_done into parent inbox', async () => {
     const parent = await queue.add('orchestrate', {});
@@ -1517,7 +1519,7 @@ describe('MinionQueue: child_done', () => {
 describe('MinionQueue: Attachments', () => {
   beforeEach(async () => {
     await engine.executeRaw('DELETE FROM minion_attachments');
-  });
+  }, PGLITE_HOOK_MS);
 
   const b64 = (s: string) => Buffer.from(s, 'utf-8').toString('base64');
 
@@ -1790,7 +1792,7 @@ describe('resolveWorkerConcurrency (v0.19.1 H3): clamp + validation', () => {
     const mod = await import('../src/commands/jobs.ts');
     resolveWorkerConcurrency = mod.resolveWorkerConcurrency;
     parseMaxWaitingFlag = mod.parseMaxWaitingFlag;
-  });
+  }, PGLITE_HOOK_MS);
 
   test('flag=4 env-unset → 4', () => {
     expect(resolveWorkerConcurrency(['--concurrency', '4'], {} as NodeJS.ProcessEnv)).toBe(4);
@@ -1819,7 +1821,7 @@ describe('parseMaxWaitingFlag (v0.19.1 H5): CLI flag wiring', () => {
   let parseMaxWaitingFlag: (args: string[]) => number | undefined;
   beforeAll(async () => {
     parseMaxWaitingFlag = (await import('../src/commands/jobs.ts')).parseMaxWaitingFlag;
-  });
+  }, PGLITE_HOOK_MS);
 
   test('absent → undefined (no cap, default submit path)', () => {
     expect(parseMaxWaitingFlag(['foo', '--params', '{}'])).toBeUndefined();

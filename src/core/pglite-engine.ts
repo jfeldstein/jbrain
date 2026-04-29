@@ -10,7 +10,7 @@ import { acquireLock, releaseLock, type LockHandle } from './pglite-lock.ts';
 import type {
   Page, PageInput, PageFilters, PageType,
   Chunk, ChunkInput, StaleChunkRow,
-  SearchResult, SearchOpts,
+  SearchResult, SearchOpts, SearchKeywordScopedOpts, TraversePathsScopedOpts,
   Link, GraphNode, GraphPath,
   TimelineEntry, TimelineInput, TimelineOpts,
   RawData,
@@ -341,6 +341,86 @@ export class PGLiteEngine implements BrainEngine {
        ORDER BY score DESC
        LIMIT $2 OFFSET $3`,
       params
+    );
+
+    return (rows as Record<string, unknown>[]).map(rowToSearchResult);
+  }
+
+  async searchKeywordScoped(
+    query: string,
+    slugs: string[],
+    opts?: SearchKeywordScopedOpts,
+  ): Promise<SearchResult[]> {
+    if (slugs.length === 0) return [];
+
+    const limit = clampSearchLimit(opts?.limit);
+    const offset = opts?.offset || 0;
+    const detailFilter = opts?.detail === 'low' ? `AND cc.chunk_source = 'compiled_truth'` : '';
+    const language = opts?.language;
+    const symbolKind = opts?.symbolKind;
+    const sourceId = opts?.sourceId;
+
+    const perSlugCapRaw = opts?.perSlugCap ?? 3;
+    const perSlugCap = Math.max(1, Math.min(Math.floor(perSlugCapRaw), 20));
+
+    const boostMap = resolveBoostMap();
+    const sourceFactorCase = buildSourceFactorCase('p.slug', boostMap, opts?.detail);
+    const hardExcludePrefixes = resolveHardExcludes(opts?.exclude_slug_prefixes, opts?.include_slug_prefixes);
+    const hardExcludeClause = buildHardExcludeClause('p.slug', hardExcludePrefixes);
+
+    const params: unknown[] = [query, slugs, perSlugCap, limit, offset];
+    let extraFilter = '';
+    if (language) {
+      params.push(language);
+      extraFilter += ` AND cc.language = $${params.length}`;
+    }
+    if (symbolKind) {
+      params.push(symbolKind);
+      extraFilter += ` AND cc.symbol_type = $${params.length}`;
+    }
+    if (sourceId && sourceId !== '__all__') {
+      params.push(sourceId);
+      extraFilter += ` AND p.source_id = $${params.length}`;
+    }
+    if (opts?.exclude_slugs?.length) {
+      params.push(opts.exclude_slugs);
+      extraFilter += ` AND p.slug != ALL($${params.length}::text[])`;
+    }
+    if (opts?.type) {
+      params.push(opts.type);
+      extraFilter += ` AND p.type = $${params.length}`;
+    }
+
+    const { rows } = await this.db.query(
+      `WITH ranked AS (
+         SELECT
+           p.slug, p.id as page_id, p.title, p.type, p.source_id,
+           cc.id as chunk_id, cc.chunk_index, cc.chunk_text, cc.chunk_source,
+           ts_rank(cc.search_vector, websearch_to_tsquery('english', $1)) * ${sourceFactorCase} AS score,
+           CASE WHEN p.updated_at < (
+             SELECT MAX(te.created_at) FROM timeline_entries te WHERE te.page_id = p.id
+           ) THEN true ELSE false END AS stale
+         FROM content_chunks cc
+         JOIN pages p ON p.id = cc.page_id
+         WHERE cc.search_vector @@ websearch_to_tsquery('english', $1)
+           AND p.slug = ANY($2::text[])
+           ${detailFilter}
+           ${hardExcludeClause}
+           ${extraFilter}
+       ),
+       capped AS (
+         SELECT *,
+                ROW_NUMBER() OVER (PARTITION BY slug ORDER BY score DESC) AS rn
+           FROM ranked
+       )
+       SELECT slug, page_id, title, type, source_id,
+              chunk_id, chunk_index, chunk_text, chunk_source,
+              score, stale
+         FROM capped
+        WHERE rn <= $3
+        ORDER BY score DESC
+        LIMIT $4 OFFSET $5`,
+      params,
     );
 
     return (rows as Record<string, unknown>[]).map(rowToSearchResult);
@@ -843,6 +923,130 @@ export class PGLiteEngine implements BrainEngine {
 
     const { rows } = await this.db.query(sql, params);
     // Dedup edges (same from/to/type/depth can appear via multiple visited paths).
+    const seen = new Set<string>();
+    const result: GraphPath[] = [];
+    for (const r of rows as Record<string, unknown>[]) {
+      const key = `${r.from_slug}|${r.to_slug}|${r.link_type}|${r.depth}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      result.push({
+        from_slug: r.from_slug as string,
+        to_slug: r.to_slug as string,
+        link_type: r.link_type as string,
+        context: (r.context as string) || '',
+        depth: r.depth as number,
+      });
+    }
+    return result;
+  }
+
+  async traversePathsScoped(
+    slug: string,
+    opts: TraversePathsScopedOpts,
+  ): Promise<GraphPath[]> {
+    const depth = Math.max(1, Math.min(opts.depth ?? 1, 2));
+    const direction = opts.direction ?? 'out';
+    const sourceId = opts.sourceId;
+    const linkTypes = opts.linkTypes;
+
+    if (linkTypes && linkTypes.length === 0) return [];
+
+    const params: unknown[] = [slug, depth];
+    let typeClause = '';
+    if (linkTypes && linkTypes.length > 0) {
+      params.push(linkTypes);
+      typeClause = `AND l.link_type = ANY($${params.length}::text[])`;
+    }
+
+    let sourceClauseRoot = '';
+    let sourceClauseHop = '';
+    if (sourceId && sourceId !== '__all__') {
+      params.push(sourceId);
+      const p = `$${params.length}`;
+      sourceClauseRoot = `AND p.source_id = ${p}`;
+      sourceClauseHop = `AND p2.source_id = ${p}`;
+    }
+
+    let sql: string;
+    if (direction === 'out') {
+      sql = `
+        WITH RECURSIVE walk AS (
+          SELECT p.id, p.slug, 0::int AS depth, ARRAY[p.id] AS visited
+          FROM pages p WHERE p.slug = $1 ${sourceClauseRoot}
+          UNION ALL
+          SELECT p2.id, p2.slug, w.depth + 1, w.visited || p2.id
+          FROM walk w
+          JOIN links l ON l.from_page_id = w.id
+          JOIN pages p2 ON p2.id = l.to_page_id
+          WHERE w.depth < $2
+            AND NOT (p2.id = ANY(w.visited))
+            ${typeClause}
+            ${sourceClauseHop}
+        )
+        SELECT w.slug AS from_slug, p2.slug AS to_slug,
+               l.link_type, l.context, w.depth + 1 AS depth
+        FROM walk w
+        JOIN links l ON l.from_page_id = w.id
+        JOIN pages p2 ON p2.id = l.to_page_id
+        WHERE w.depth < $2
+          ${typeClause}
+          ${sourceClauseHop}
+        ORDER BY depth, from_slug, to_slug
+      `;
+    } else if (direction === 'in') {
+      sql = `
+        WITH RECURSIVE walk AS (
+          SELECT p.id, p.slug, 0::int AS depth, ARRAY[p.id] AS visited
+          FROM pages p WHERE p.slug = $1 ${sourceClauseRoot}
+          UNION ALL
+          SELECT p2.id, p2.slug, w.depth + 1, w.visited || p2.id
+          FROM walk w
+          JOIN links l ON l.to_page_id = w.id
+          JOIN pages p2 ON p2.id = l.from_page_id
+          WHERE w.depth < $2
+            AND NOT (p2.id = ANY(w.visited))
+            ${typeClause}
+            ${sourceClauseHop}
+        )
+        SELECT p2.slug AS from_slug, w.slug AS to_slug,
+               l.link_type, l.context, w.depth + 1 AS depth
+        FROM walk w
+        JOIN links l ON l.to_page_id = w.id
+        JOIN pages p2 ON p2.id = l.from_page_id
+        WHERE w.depth < $2
+          ${typeClause}
+          ${sourceClauseHop}
+        ORDER BY depth, from_slug, to_slug
+      `;
+    } else {
+      sql = `
+        WITH RECURSIVE walk AS (
+          SELECT p.id, 0::int AS depth, ARRAY[p.id] AS visited
+          FROM pages p WHERE p.slug = $1 ${sourceClauseRoot}
+          UNION ALL
+          SELECT p2.id, w.depth + 1, w.visited || p2.id
+          FROM walk w
+          JOIN links l ON (l.from_page_id = w.id OR l.to_page_id = w.id)
+          JOIN pages p2 ON p2.id = CASE WHEN l.from_page_id = w.id THEN l.to_page_id ELSE l.from_page_id END
+          WHERE w.depth < $2
+            AND NOT (p2.id = ANY(w.visited))
+            ${typeClause}
+            ${sourceClauseHop}
+        )
+        SELECT pf.slug AS from_slug, pt.slug AS to_slug,
+               l.link_type, l.context, w.depth + 1 AS depth
+        FROM walk w
+        JOIN links l ON (l.from_page_id = w.id OR l.to_page_id = w.id)
+        JOIN pages pf ON pf.id = l.from_page_id
+        JOIN pages pt ON pt.id = l.to_page_id
+        WHERE w.depth < $2
+          ${typeClause}
+          ${sourceClauseHop}
+        ORDER BY depth, from_slug, to_slug
+      `;
+    }
+
+    const { rows } = await this.db.query(sql, params);
     const seen = new Set<string>();
     const result: GraphPath[] = [];
     for (const r of rows as Record<string, unknown>[]) {

@@ -20,6 +20,8 @@ import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
 import { PGLiteEngine } from '../src/core/pglite-engine.ts';
 import { importCodeFile } from '../src/core/import-file.ts';
 
+const PGLITE_PARALLEL_TIMEOUT_MS = 30_000;
+
 describe('Cathedral II BrainBench — call_graph_recall', () => {
   let engine: PGLiteEngine;
 
@@ -43,11 +45,11 @@ describe('Cathedral II BrainBench — call_graph_recall', () => {
       'export function helper() { return 42; }\n',
       { noEmbed: true },
     );
-  });
+  }, PGLITE_PARALLEL_TIMEOUT_MS);
 
   afterAll(async () => {
     await engine.disconnect();
-  }, 30_000);
+  }, PGLITE_PARALLEL_TIMEOUT_MS);
 
   test('getCallersOf("helper") returns runner as a caller', async () => {
     const results = await engine.getCallersOf('helper', { allSources: true });
@@ -55,14 +57,14 @@ describe('Cathedral II BrainBench — call_graph_recall', () => {
     const fromRunner = results.find(r => r.from_symbol_qualified === 'runner');
     expect(fromRunner).toBeDefined();
     expect(fromRunner!.edge_type).toBe('calls');
-  });
+  }, PGLITE_PARALLEL_TIMEOUT_MS);
 
   test('getCalleesOf("runner") returns helper as a callee', async () => {
     const results = await engine.getCalleesOf('runner', { allSources: true });
     expect(results.length).toBeGreaterThanOrEqual(1);
     const toHelper = results.find(r => r.to_symbol_qualified === 'helper');
     expect(toHelper).toBeDefined();
-  });
+  }, PGLITE_PARALLEL_TIMEOUT_MS);
 
   test('re-importing the same file is idempotent (no duplicate edges)', async () => {
     const before = await engine.getCallersOf('helper', { allSources: true });
@@ -75,7 +77,7 @@ describe('Cathedral II BrainBench — call_graph_recall', () => {
     const after = await engine.getCallersOf('helper', { allSources: true });
     // Per-chunk invalidation wipes then re-writes, so counts should match.
     expect(after.length).toBe(before.length);
-  });
+  }, PGLITE_PARALLEL_TIMEOUT_MS);
 });
 
 describe('Cathedral II BrainBench — parent_scope_coverage', () => {
@@ -99,11 +101,11 @@ describe('Cathedral II BrainBench — parent_scope_coverage', () => {
 `,
       { noEmbed: true },
     );
-  });
+  }, PGLITE_PARALLEL_TIMEOUT_MS);
 
   afterAll(async () => {
     await engine.disconnect();
-  }, 30_000);
+  }, PGLITE_PARALLEL_TIMEOUT_MS);
 
   test('nested method chunks persist parent_symbol_path', async () => {
     const chunks = await engine.getChunks('src-brain-ts');
@@ -118,7 +120,7 @@ describe('Cathedral II BrainBench — parent_scope_coverage', () => {
     // Class-level chunk: parent_symbol_path is null / empty (top-level).
     const klassPath = klass!.parent_symbol_path as string[] | null;
     expect(klassPath == null || klassPath.length === 0).toBe(true);
-  });
+  }, PGLITE_PARALLEL_TIMEOUT_MS);
 
   test('qualified symbol name resolves for nested methods', async () => {
     const chunks = await engine.getChunks('src-brain-ts');

@@ -587,6 +587,8 @@ const query: Operation = {
     // v0.20.0 Cathedral II Layer 7 (A2) / Layer 10 C3: two-pass structural expansion.
     near_symbol: { type: 'string', description: 'Anchor retrieval at this qualified symbol name (e.g., BrainEngine.searchKeyword). Enables A2 two-pass.' },
     walk_depth: { type: 'number', description: 'Structural walk depth 1-2. Default 0 (off). Expands anchors through code_edges with 1/(1+hop) decay.' },
+    entity_walk_depth: { type: 'number', description: 'Entity graph walk depth 0-2. Default unset (resolved by intent + rollout gate).' },
+    entity_walk_edge_policy: { type: 'string', description: 'Entity graph edge policy (intent_based | typed_only | all). Default intent_based.' },
   },
   handler: async (ctx, p) => {
     const expand = p.expand !== false;
@@ -601,6 +603,8 @@ const query: Operation = {
       symbolKind: (p.symbol_kind as string) || undefined,
       nearSymbol: (p.near_symbol as string) || undefined,
       walkDepth: typeof p.walk_depth === 'number' ? (p.walk_depth as number) : undefined,
+      entityWalkDepth: typeof p.entity_walk_depth === 'number' ? (p.entity_walk_depth as 0 | 1 | 2) : undefined,
+      entityWalkEdgePolicy: (p.entity_walk_edge_policy as any) || undefined,
     });
   },
   cliHints: { name: 'query', positional: ['query'] },

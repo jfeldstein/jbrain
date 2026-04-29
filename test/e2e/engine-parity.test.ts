@@ -141,6 +141,22 @@ describeBoth('Engine parity — Postgres vs PGLite', () => {
     });
   }
 
+  test('searchKeywordScoped: top slug matches within scoped slug set', async () => {
+    const q = 'fat code thin harness';
+    const scopedSlugs = [
+      'originals/talks/article-outline-fat-code',
+      'wintermute/chat/2026-04-15',
+      'concepts/fat-code-thin-harness',
+    ];
+    const pgResults = await pgEngine.searchKeywordScoped(q, scopedSlugs, { limit: 10 });
+    const pgliteResults = await pgliteEngine.searchKeywordScoped(q, scopedSlugs, { limit: 10 });
+
+    expect(pgResults[0]?.slug).toBe(pgliteResults[0]?.slug);
+    expect(new Set(pgResults.map((r: SearchResult) => r.slug))).toEqual(
+      new Set(pgliteResults.map((r: SearchResult) => r.slug)),
+    );
+  });
+
   test('searchVector: top result matches between engines', async () => {
     const queryVec = basisEmbedding(7); // article direction
     const pgResults = await pgEngine.searchVector(queryVec, { limit: 5 });

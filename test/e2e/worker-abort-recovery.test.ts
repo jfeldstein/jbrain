@@ -17,6 +17,8 @@ import { PGLiteEngine } from '../../src/core/pglite-engine.ts';
 import { MinionQueue } from '../../src/core/minions/queue.ts';
 import { MinionWorker } from '../../src/core/minions/worker.ts';
 
+const PGLITE_HOOK_MS = 30_000;
+
 let engine: PGLiteEngine;
 let queue: MinionQueue;
 
@@ -25,15 +27,15 @@ beforeAll(async () => {
   await engine.connect({ database_url: '' });
   await engine.initSchema();
   queue = new MinionQueue(engine);
-});
+}, PGLITE_HOOK_MS);
 
 afterAll(async () => {
   await engine.disconnect();
-});
+}, PGLITE_HOOK_MS);
 
 beforeEach(async () => {
   await engine.executeRaw('DELETE FROM minion_jobs');
-});
+}, PGLITE_HOOK_MS);
 
 describe('E2E: worker abort recovery (2026-04-24 regression)', () => {
   test('worker recovers from timed-out handler and processes next job', async () => {

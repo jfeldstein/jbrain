@@ -137,6 +137,8 @@ describe('Layer 6 (A3) — top-level function unchanged', () => {
   });
 });
 
+const PGLITE_PARALLEL_TIMEOUT_MS = 30_000;
+
 describe('Layer 6 (A3) — parent_symbol_path round-trips through upsertChunks', () => {
   let engine: PGLiteEngine;
 
@@ -171,11 +173,11 @@ describe('Layer 6 (A3) — parent_symbol_path round-trips through upsertChunks',
         parent_symbol_path: ['BrainEngine'],
       },
     ]);
-  });
+  }, PGLITE_PARALLEL_TIMEOUT_MS);
 
   afterAll(async () => {
     await engine.disconnect();
-  }, 30_000);
+  }, PGLITE_PARALLEL_TIMEOUT_MS);
 
   test('parent_symbol_path persists as text[] and survives round-trip', async () => {
     const chunks = await engine.getChunks('src-brain-ts');
@@ -187,5 +189,5 @@ describe('Layer 6 (A3) — parent_symbol_path round-trips through upsertChunks',
     const klass = chunks.find(c => c.symbol_name === 'BrainEngine');
     // Class-level chunk: parent path is null in the DB (no enclosing scope).
     expect(klass!.parent_symbol_path == null || (klass!.parent_symbol_path as string[]).length === 0).toBe(true);
-  });
+  }, PGLITE_PARALLEL_TIMEOUT_MS);
 });

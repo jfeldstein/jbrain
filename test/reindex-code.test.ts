@@ -15,6 +15,8 @@ import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
 import { PGLiteEngine } from '../src/core/pglite-engine.ts';
 import { runReindexCode } from '../src/commands/reindex-code.ts';
 
+const PGLITE_PARALLEL_TIMEOUT_MS = 30_000;
+
 describe('Layer 13 E2 — runReindexCode', () => {
   let engine: PGLiteEngine;
 
@@ -59,17 +61,17 @@ describe('Layer 13 E2 — runReindexCode', () => {
       compiled_truth: 'This is a markdown page, not code.',
       timeline: '',
     });
-  });
+  }, PGLITE_PARALLEL_TIMEOUT_MS);
 
   afterAll(async () => {
     await engine.disconnect();
-  }, 30_000);
+  }, PGLITE_PARALLEL_TIMEOUT_MS);
 
   test('counts code pages, ignores markdown', async () => {
     const result = await runReindexCode(engine, { dryRun: true, noEmbed: true });
     expect(result.status).toBe('dry_run');
     expect(result.codePages).toBe(3); // foo, bar, bad — not the guide
-  });
+  }, PGLITE_PARALLEL_TIMEOUT_MS);
 
   test('dry-run reports cost + token count without importing', async () => {
     const result = await runReindexCode(engine, { dryRun: true, noEmbed: true });
@@ -78,7 +80,7 @@ describe('Layer 13 E2 — runReindexCode', () => {
     expect(result.totalTokens).toBeGreaterThan(0);
     expect(result.costUsd).toBeGreaterThanOrEqual(0);
     expect(result.model).toBe('text-embedding-3-large');
-  });
+  }, PGLITE_PARALLEL_TIMEOUT_MS);
 
   test('reindex walks every code page, failures counted per-slug', async () => {
     const result = await runReindexCode(engine, { noEmbed: true });
@@ -88,7 +90,7 @@ describe('Layer 13 E2 — runReindexCode', () => {
     expect(result.failed).toBeGreaterThanOrEqual(1);
     expect(result.failures).toBeDefined();
     expect(result.failures!.some(f => f.slug === 'src-bad-ts')).toBe(true);
-  });
+  }, PGLITE_PARALLEL_TIMEOUT_MS);
 
   test('empty brain returns ok with zero counts', async () => {
     const empty = new PGLiteEngine();
@@ -109,5 +111,5 @@ describe('Layer 13 E2 — runReindexCode', () => {
       batchSize: 1,
     });
     expect(result.codePages).toBe(3);
-  });
+  }, PGLITE_PARALLEL_TIMEOUT_MS);
 });

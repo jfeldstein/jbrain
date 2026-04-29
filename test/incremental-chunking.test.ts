@@ -16,17 +16,19 @@ import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
 import { PGLiteEngine } from '../src/core/pglite-engine.ts';
 import { importCodeFile } from '../src/core/import-file.ts';
 
+const PGLITE_HOOK_MS = 30_000;
+
 let engine: PGLiteEngine;
 
 beforeAll(async () => {
   engine = new PGLiteEngine();
   await engine.connect({});
   await engine.initSchema();
-});
+}, PGLITE_HOOK_MS);
 
 afterAll(async () => {
   await engine.disconnect();
-});
+}, PGLITE_HOOK_MS);
 
 describe('importCodeFile — incremental chunking', () => {
   test('re-importing same content skips embedding entirely', async () => {

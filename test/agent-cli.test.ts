@@ -18,6 +18,8 @@ import { __testing as agentTesting } from '../src/commands/agent.ts';
 import { parseSince } from '../src/commands/agent-logs.ts';
 import { isProtectedJobName, PROTECTED_JOB_NAMES } from '../src/core/minions/protected-names.ts';
 
+const PGLITE_HOOK_MS = 30_000;
+
 let engine: PGLiteEngine;
 let queue: MinionQueue;
 
@@ -26,15 +28,15 @@ beforeAll(async () => {
   await engine.connect({ database_url: '' });
   await engine.initSchema();
   queue = new MinionQueue(engine);
-});
+}, PGLITE_HOOK_MS);
 
 afterAll(async () => {
   await engine.disconnect();
-});
+}, PGLITE_HOOK_MS);
 
 beforeEach(async () => {
   await engine.executeRaw('DELETE FROM minion_jobs');
-});
+}, PGLITE_HOOK_MS);
 
 describe('parseRunFlags', () => {
   test('follow defaults off when stdout is non-TTY (test env)', () => {

@@ -15,6 +15,8 @@ import { describe, test, expect } from 'bun:test';
 import { PGLiteEngine } from '../src/core/pglite-engine.ts';
 import { MIGRATIONS } from '../src/core/migrate.ts';
 
+const PGLITE_PARALLEL_TIMEOUT_MS = 30_000;
+
 describe('MIGRATIONS array shape', () => {
   test('v25 and v26 are present and ordered', () => {
     const v25 = MIGRATIONS.find(m => m.version === 25);
@@ -71,7 +73,7 @@ describe('PGLite fresh-install schema reflects v0.19.0', () => {
     } finally {
       await engine.disconnect();
     }
-  });
+  }, PGLITE_PARALLEL_TIMEOUT_MS);
 
   test('content_chunks has code metadata columns, all nullable', async () => {
     const engine = new PGLiteEngine();
@@ -92,7 +94,7 @@ describe('PGLite fresh-install schema reflects v0.19.0', () => {
     } finally {
       await engine.disconnect();
     }
-  });
+  }, PGLITE_PARALLEL_TIMEOUT_MS);
 
   test('pages.page_kind CHECK constraint rejects invalid values', async () => {
     const engine = new PGLiteEngine();
@@ -109,7 +111,7 @@ describe('PGLite fresh-install schema reflects v0.19.0', () => {
     } finally {
       await engine.disconnect();
     }
-  });
+  }, PGLITE_PARALLEL_TIMEOUT_MS);
 
   test('putPage writes page_kind=markdown by default', async () => {
     const engine = new PGLiteEngine();
@@ -129,7 +131,7 @@ describe('PGLite fresh-install schema reflects v0.19.0', () => {
     } finally {
       await engine.disconnect();
     }
-  });
+  }, PGLITE_PARALLEL_TIMEOUT_MS);
 
   test('putPage writes page_kind=code when specified', async () => {
     const engine = new PGLiteEngine();
@@ -150,7 +152,7 @@ describe('PGLite fresh-install schema reflects v0.19.0', () => {
     } finally {
       await engine.disconnect();
     }
-  });
+  }, PGLITE_PARALLEL_TIMEOUT_MS);
 
   test('upsertChunks round-trips code metadata', async () => {
     const engine = new PGLiteEngine();
@@ -189,7 +191,7 @@ describe('PGLite fresh-install schema reflects v0.19.0', () => {
     } finally {
       await engine.disconnect();
     }
-  });
+  }, PGLITE_PARALLEL_TIMEOUT_MS);
 
   test('upsertChunks on markdown chunk leaves code metadata NULL', async () => {
     const engine = new PGLiteEngine();
@@ -217,5 +219,5 @@ describe('PGLite fresh-install schema reflects v0.19.0', () => {
     } finally {
       await engine.disconnect();
     }
-  });
+  }, PGLITE_PARALLEL_TIMEOUT_MS);
 });

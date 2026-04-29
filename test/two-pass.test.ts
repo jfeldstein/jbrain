@@ -14,6 +14,8 @@ import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
 import { PGLiteEngine } from '../src/core/pglite-engine.ts';
 import { expandAnchors, hydrateChunks } from '../src/core/search/two-pass.ts';
 
+const PGLITE_PARALLEL_TIMEOUT_MS = 30_000;
+
 describe('Layer 7 (A2) — expandAnchors', () => {
   let engine: PGLiteEngine;
   let chunkA: number;
@@ -86,11 +88,11 @@ describe('Layer 7 (A2) — expandAnchors', () => {
         from_symbol_qualified: 'b', to_symbol_qualified: 'c',
         edge_type: 'calls' },
     ]);
-  });
+  }, PGLITE_PARALLEL_TIMEOUT_MS);
 
   afterAll(async () => {
     await engine.disconnect();
-  }, 30_000);
+  }, PGLITE_PARALLEL_TIMEOUT_MS);
 
   test('walkDepth=0 is a no-op (anchors only)', async () => {
     const anchors = [{
@@ -102,7 +104,7 @@ describe('Layer 7 (A2) — expandAnchors', () => {
     expect(expanded.length).toBe(1);
     expect(expanded[0]!.chunk_id).toBe(chunkA);
     expect(expanded[0]!.hop).toBe(0);
-  });
+  }, PGLITE_PARALLEL_TIMEOUT_MS);
 
   test('walkDepth=1 expands to direct neighbors', async () => {
     const anchors = [{
@@ -119,7 +121,7 @@ describe('Layer 7 (A2) — expandAnchors', () => {
     expect(neighbor!.hop).toBe(1);
     // 1/(1+1) * 1.0 = 0.5
     expect(neighbor!.score).toBeCloseTo(0.5, 2);
-  });
+  }, PGLITE_PARALLEL_TIMEOUT_MS);
 
   test('walkDepth=2 reaches grandchildren', async () => {
     const anchors = [{
@@ -132,7 +134,7 @@ describe('Layer 7 (A2) — expandAnchors', () => {
     expect(ids).toContain(chunkC); // 2-hop
     const twoHop = expanded.find(e => e.chunk_id === chunkC);
     expect(twoHop!.hop).toBe(2);
-  });
+  }, PGLITE_PARALLEL_TIMEOUT_MS);
 
   test('walkDepth clamps at 2 (even when caller passes 5)', async () => {
     const anchors = [{
@@ -143,7 +145,7 @@ describe('Layer 7 (A2) — expandAnchors', () => {
     const expanded = await expandAnchors(engine, anchors, { walkDepth: 5 });
     const maxHop = Math.max(...expanded.map(e => e.hop));
     expect(maxHop).toBeLessThanOrEqual(2);
-  });
+  }, PGLITE_PARALLEL_TIMEOUT_MS);
 
   test('nearSymbol anchors chunks by qualified name', async () => {
     const expanded = await expandAnchors(engine, [], {
@@ -153,7 +155,7 @@ describe('Layer 7 (A2) — expandAnchors', () => {
     const ids = expanded.map(e => e.chunk_id);
     expect(ids).toContain(chunkB); // anchored via nearSymbol
     expect(ids).toContain(chunkC); // 1-hop neighbor
-  });
+  }, PGLITE_PARALLEL_TIMEOUT_MS);
 
   test('hydrateChunks fetches SearchResult rows for chunk IDs', async () => {
     const rows = await hydrateChunks(engine, [chunkB, chunkC]);
@@ -161,12 +163,12 @@ describe('Layer 7 (A2) — expandAnchors', () => {
     const slugs = rows.map(r => r.slug);
     expect(slugs).toContain('src-b-ts');
     expect(slugs).toContain('src-c-ts');
-  });
+  }, PGLITE_PARALLEL_TIMEOUT_MS);
 
   test('hydrateChunks with empty array returns []', async () => {
     const rows = await hydrateChunks(engine, []);
     expect(rows).toEqual([]);
-  });
+  }, PGLITE_PARALLEL_TIMEOUT_MS);
 });
 
 describe('Layer 7 (A2) — query operation schema', () => {
@@ -177,5 +179,15 @@ describe('Layer 7 (A2) — query operation schema', () => {
     expect(queryOp!.params.near_symbol).toBeDefined();
     expect(queryOp!.params.walk_depth).toBeDefined();
     expect(queryOp!.params.walk_depth!.type).toBe('number');
-  });
+  }, PGLITE_PARALLEL_TIMEOUT_MS);
+
+  test('query op exposes entity_walk_depth + entity_walk_edge_policy params', async () => {
+    const { operations } = await import('../src/core/operations.ts');
+    const queryOp = operations.find(o => o.name === 'query');
+    expect(queryOp).toBeDefined();
+    expect(queryOp!.params.entity_walk_depth).toBeDefined();
+    expect(queryOp!.params.entity_walk_edge_policy).toBeDefined();
+    expect(queryOp!.params.entity_walk_depth!.type).toBe('number');
+    expect(queryOp!.params.entity_walk_edge_policy!.type).toBe('string');
+  }, PGLITE_PARALLEL_TIMEOUT_MS);
 });

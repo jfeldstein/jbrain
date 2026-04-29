@@ -14,7 +14,9 @@ import { MAX_SEARCH_LIMIT, clampSearchLimit } from '../engine.ts';
 import type { SearchResult, SearchOpts } from '../types.ts';
 import { embed } from '../embedding.ts';
 import { dedupResults } from './dedup.ts';
-import { autoDetectDetail } from './intent.ts';
+import { autoDetectDetail, classifyQueryIntent } from './intent.ts';
+import { resolveEntityWalkDepth } from './entity-walk.ts';
+import { runEntityGraphExpansion } from './entity-two-pass.ts';
 import { expandAnchors, hydrateChunks } from './two-pass.ts';
 
 const RRF_K = 60;
@@ -76,17 +78,51 @@ export async function hybridSearch(
     // per-engine searchKeyword / searchVector apply the filters at SQL level.
     language: opts?.language,
     symbolKind: opts?.symbolKind,
+    sourceId: opts?.sourceId,
+    exclude_slug_prefixes: opts?.exclude_slug_prefixes,
+    include_slug_prefixes: opts?.include_slug_prefixes,
+    exclude_slugs: opts?.exclude_slugs,
   };
 
   if (DEBUG && detail) {
     console.error(`[search-debug] auto-detail=${detail} for query="${query}"`);
   }
 
+  const intent = classifyQueryIntent(query);
+  const entityGate = process.env.GBRAIN_ENTITY_GRAPH_RAG === '1';
+  const resolvedEntityWalk = resolveEntityWalkDepth(opts?.entityWalkDepth, intent, entityGate);
+  const entityEdgePolicy = opts?.entityWalkEdgePolicy ?? 'intent_based';
+
+  const mergeEntityExpansion = async (pool: SearchResult[]) => {
+    if (resolvedEntityWalk === 0 || pool.length === 0) return;
+    const expanded = await runEntityGraphExpansion(engine, query, pool, intent, resolvedEntityWalk, {
+      edgePolicy: entityEdgePolicy,
+      sourceId: opts?.sourceId,
+      searchBaseOpts: searchOpts,
+      limit,
+    });
+    const existingIds = new Set(pool.map(r => r.chunk_id));
+    for (const r of expanded) {
+      if (!existingIds.has(r.chunk_id)) {
+        existingIds.add(r.chunk_id);
+        pool.push(r);
+      }
+    }
+    pool.sort((a, b) => b.score - a.score);
+  };
+
   // Run keyword search (always available, no API key needed)
   const keywordResults = await engine.searchKeyword(query, searchOpts);
 
   // Skip vector search entirely if no OpenAI key is configured
   if (!process.env.OPENAI_API_KEY) {
+    if (keywordResults.length > 0 && resolvedEntityWalk > 0) {
+      try {
+        await mergeEntityExpansion(keywordResults);
+      } catch {
+        // Entity expansion is best-effort — graph empty or transient DB error.
+      }
+    }
     // Apply backlink boost in keyword-only path too. One getBacklinkCounts query
     // per search request; not N+1.
     if (keywordResults.length > 0) {
@@ -99,7 +135,15 @@ export async function hybridSearch(
         // Boost failure is non-fatal: keep unboosted ranking.
       }
     }
-    return dedupResults(keywordResults).slice(offset, offset + limit);
+    let dedupOptsKw = opts?.dedupOpts;
+    if (resolvedEntityWalk > 0) {
+      const capFromEntity = Math.min(10, Math.max(resolvedEntityWalk * 5, 5));
+      dedupOptsKw = {
+        ...(dedupOptsKw ?? {}),
+        maxPerPage: Math.max(dedupOptsKw?.maxPerPage ?? 2, capFromEntity),
+      };
+    }
+    return dedupResults(keywordResults, dedupOptsKw).slice(offset, offset + limit);
   }
 
   // Determine query variants (optionally with expansion)
@@ -140,6 +184,14 @@ export async function hybridSearch(
   // Cosine re-scoring before dedup so semantically better chunks survive
   if (queryEmbedding) {
     fused = await cosineReScore(engine, fused, queryEmbedding);
+  }
+
+  if (fused.length > 0 && resolvedEntityWalk > 0) {
+    try {
+      await mergeEntityExpansion(fused);
+    } catch {
+      // Entity expansion is best-effort.
+    }
   }
 
   // Apply backlink boost AFTER cosine re-score so the boost survives normalization,
@@ -198,6 +250,14 @@ export async function hybridSearch(
       // Expansion is best-effort — missing edge tables or a transient
       // DB error must not break base hybrid retrieval.
     }
+  }
+
+  if (resolvedEntityWalk > 0) {
+    const capFromEntity = Math.min(10, Math.max(resolvedEntityWalk * 5, 5));
+    dedupOpts = {
+      ...(dedupOpts ?? {}),
+      maxPerPage: Math.max(dedupOpts?.maxPerPage ?? 2, capFromEntity),
+    };
   }
 
   // Dedup

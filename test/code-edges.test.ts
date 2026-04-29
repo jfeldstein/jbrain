@@ -9,6 +9,8 @@
 import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
 import { PGLiteEngine } from '../src/core/pglite-engine.ts';
 
+const PGLITE_PARALLEL_TIMEOUT_MS = 30_000;
+
 describe('Layer 5 (A1) — code-edges engine methods', () => {
   let engine: PGLiteEngine;
   let chunkA: number;
@@ -56,11 +58,11 @@ describe('Layer 5 (A1) — code-edges engine methods', () => {
     const bChunks = await engine.getChunks('src-b-ts');
     chunkA = aChunks[0]!.id;
     chunkB = bChunks[0]!.id;
-  });
+  }, PGLITE_PARALLEL_TIMEOUT_MS);
 
   afterAll(async () => {
     await engine.disconnect();
-  }, 30_000);
+  }, PGLITE_PARALLEL_TIMEOUT_MS);
 
   test('addCodeEdges inserts unresolved rows into code_edges_symbol', async () => {
     const inserted = await engine.addCodeEdges([{
@@ -71,7 +73,7 @@ describe('Layer 5 (A1) — code-edges engine methods', () => {
       edge_type: 'calls',
     }]);
     expect(inserted).toBeGreaterThanOrEqual(1);
-  });
+  }, PGLITE_PARALLEL_TIMEOUT_MS);
 
   test('getCallersOf finds the caller by short name (unresolved path)', async () => {
     const results = await engine.getCallersOf('helper', { allSources: true });
@@ -81,13 +83,13 @@ describe('Layer 5 (A1) — code-edges engine methods', () => {
     expect(hit!.resolved).toBe(false); // unresolved (from code_edges_symbol)
     expect(hit!.to_symbol_qualified).toBe('helper');
     expect(hit!.edge_type).toBe('calls');
-  });
+  }, PGLITE_PARALLEL_TIMEOUT_MS);
 
   test('getCalleesOf finds outbound edges', async () => {
     const results = await engine.getCalleesOf('run', { allSources: true });
     expect(results.length).toBeGreaterThanOrEqual(1);
     expect(results[0]!.to_symbol_qualified).toBe('helper');
-  });
+  }, PGLITE_PARALLEL_TIMEOUT_MS);
 
   test('addCodeEdges is idempotent (ON CONFLICT DO NOTHING)', async () => {
     // Re-inserting the same edge returns 0 insertions.
@@ -99,7 +101,7 @@ describe('Layer 5 (A1) — code-edges engine methods', () => {
       edge_type: 'calls',
     }]);
     expect(inserted).toBe(0);
-  });
+  }, PGLITE_PARALLEL_TIMEOUT_MS);
 
   test('addCodeEdges resolved path lands in code_edges_chunk', async () => {
     const inserted = await engine.addCodeEdges([{
@@ -116,14 +118,14 @@ describe('Layer 5 (A1) — code-edges engine methods', () => {
     const results = await engine.getCallersOf('helper', { allSources: true });
     const resolvedCount = results.filter(r => r.resolved).length;
     expect(resolvedCount).toBeGreaterThanOrEqual(1);
-  });
+  }, PGLITE_PARALLEL_TIMEOUT_MS);
 
   test('getEdgesByChunk returns edges for a known chunk', async () => {
     const outgoing = await engine.getEdgesByChunk(chunkA, { direction: 'out' });
     expect(outgoing.length).toBeGreaterThanOrEqual(1);
     const incoming = await engine.getEdgesByChunk(chunkB, { direction: 'in' });
     expect(incoming.length).toBeGreaterThanOrEqual(1);
-  });
+  }, PGLITE_PARALLEL_TIMEOUT_MS);
 
   test('deleteCodeEdgesForChunks removes rows in both directions', async () => {
     await engine.deleteCodeEdgesForChunks([chunkA]);
@@ -133,10 +135,10 @@ describe('Layer 5 (A1) — code-edges engine methods', () => {
     const callers = await engine.getCallersOf('helper', { allSources: true });
     const fromA = callers.filter(r => r.from_chunk_id === chunkA);
     expect(fromA).toEqual([]);
-  });
+  }, PGLITE_PARALLEL_TIMEOUT_MS);
 
   test('empty edge input returns 0 without SQL', async () => {
     const inserted = await engine.addCodeEdges([]);
     expect(inserted).toBe(0);
-  });
+  }, PGLITE_PARALLEL_TIMEOUT_MS);
 });

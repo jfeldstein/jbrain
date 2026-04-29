@@ -1,4 +1,4 @@
-import { describe, expect, test, beforeEach, afterEach } from 'bun:test';
+import { describe, expect, test, beforeAll, afterAll, beforeEach, afterEach } from 'bun:test';
 import { mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync, mkdirSync, symlinkSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
@@ -115,15 +115,25 @@ describe('scanBrainSources (PGLite)', () => {
   let tmp: string;
   let engine: PGLiteEngine;
 
-  beforeEach(async () => {
-    tmp = mkdtempSync(join(tmpdir(), 'brain-writer-scan-'));
+  // One WASM DB + migration pass per describe — not per test. Parallel `bun test`
+  // already spins many PGlite instances across files; redoing initSchema here every
+  // test multiplied contention and blew hook timeouts (~25 migrations × N tests).
+  beforeAll(async () => {
     engine = new PGLiteEngine();
     await engine.connect({});
     await engine.initSchema();
+  }, 60_000);
+
+  afterAll(async () => {
+    await engine.disconnect();
+  }, 60_000);
+
+  beforeEach(async () => {
+    tmp = mkdtempSync(join(tmpdir(), 'brain-writer-scan-'));
+    await engine.executeRaw(`DELETE FROM sources`);
   });
 
-  afterEach(async () => {
-    await engine.disconnect();
+  afterEach(() => {
     rmSync(tmp, { recursive: true, force: true });
   });
 

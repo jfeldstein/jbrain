@@ -20,6 +20,8 @@ import { importCodeFile } from '../../src/core/import-file.ts';
 import { findCodeDef } from '../../src/commands/code-def.ts';
 import { findCodeRefs } from '../../src/commands/code-refs.ts';
 
+const PGLITE_HOOK_MS = 30_000;
+
 let engine: PGLiteEngine;
 
 // ────────────────────────────────────────────────────────────
@@ -233,11 +235,11 @@ beforeAll(async () => {
     await importCodeFile(engine, `rust/${n.toLowerCase()}.rs`, generateRustFile(n), { noEmbed: true });
     await importCodeFile(engine, `java/${n}.java`, generateJavaFile(n), { noEmbed: true });
   }
-});
+}, PGLITE_HOOK_MS);
 
 afterAll(async () => {
   await engine.disconnect();
-});
+}, PGLITE_HOOK_MS);
 
 describe('BrainBench code — retrieval quality', () => {
   test('corpus indexed: at least 25 code pages, all page_kind=code', async () => {

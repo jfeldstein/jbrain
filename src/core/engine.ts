@@ -1,7 +1,7 @@
 import type {
   Page, PageInput, PageFilters,
   Chunk, ChunkInput, StaleChunkRow,
-  SearchResult, SearchOpts,
+  SearchResult, SearchOpts, SearchKeywordScopedOpts, TraversePathsScopedOpts,
   Link, GraphNode, GraphPath,
   TimelineEntry, TimelineInput, TimelineOpts,
   RawData,
@@ -127,6 +127,17 @@ export interface BrainEngine {
 
   // Search
   searchKeyword(query: string, opts?: SearchOpts): Promise<SearchResult[]>;
+  /**
+   * Keyword search scoped to an explicit set of slugs (chunk-grain).
+   * Used by entity-graph expansion to hydrate neighbor entity slugs into
+   * matching chunks while preserving the same SQL-level ranking + filtering
+   * semantics as searchKeyword/searchKeywordChunks.
+   */
+  searchKeywordScoped(
+    query: string,
+    slugs: string[],
+    opts?: SearchKeywordScopedOpts,
+  ): Promise<SearchResult[]>;
   searchVector(embedding: Float32Array, opts?: SearchOpts): Promise<SearchResult[]>;
   getEmbeddingsByChunkIds(ids: number[]): Promise<Map<number, Float32Array>>;
 
@@ -213,6 +224,15 @@ export interface BrainEngine {
   traversePaths(
     slug: string,
     opts?: { depth?: number; linkType?: string; direction?: 'in' | 'out' | 'both' },
+  ): Promise<GraphPath[]>;
+  /**
+   * Source-scoped edge traversal. When opts.sourceId is set (and not '__all__'),
+   * the root page is resolved by (slug, source_id) and every hop remains within
+   * that source. Supports allowlisting multiple link types in one call.
+   */
+  traversePathsScoped(
+    slug: string,
+    opts: TraversePathsScopedOpts,
   ): Promise<GraphPath[]>;
   /**
    * For a list of slugs, return how many inbound links each has.

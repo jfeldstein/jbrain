@@ -12,6 +12,8 @@ import {
 } from '../src/core/minions/transcript.ts';
 import type { ContentBlock } from '../src/core/minions/types.ts';
 
+const PGLITE_HOOK_MS = 30_000;
+
 let engine: PGLiteEngine;
 let queue: MinionQueue;
 let jobId: number;
@@ -21,11 +23,11 @@ beforeAll(async () => {
   await engine.connect({ database_url: '' });
   await engine.initSchema();
   queue = new MinionQueue(engine);
-});
+}, PGLITE_HOOK_MS);
 
 afterAll(async () => {
   await engine.disconnect();
-});
+}, PGLITE_HOOK_MS);
 
 beforeEach(async () => {
   await engine.executeRaw('DELETE FROM subagent_messages');
@@ -38,7 +40,7 @@ beforeEach(async () => {
     { allowProtectedSubmit: true },
   );
   jobId = j.id;
-});
+}, PGLITE_HOOK_MS);
 
 async function insertMessage(
   idx: number,

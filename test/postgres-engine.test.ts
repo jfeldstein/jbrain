@@ -65,6 +65,12 @@ describe('postgres-engine / search path timeout isolation', () => {
     expect(vector).toMatch(/SET\s+LOCAL\s+statement_timeout/);
   });
 
+  test('searchKeywordScoped wraps its query in sql.begin() and uses SET LOCAL', () => {
+    const fn = extractMethod(SRC, 'searchKeywordScoped');
+    expect(fn).toMatch(/sql\.begin\s*\(\s*async\s+sql\s*=>/);
+    expect(fn).toMatch(/SET\s+LOCAL\s+statement_timeout/);
+  });
+
   test('connect() with poolSize honors resolvePrepare (PgBouncer regression guard)', () => {
     // Regression: worker-instance pools were NOT honoring the prepare decision
     // before v0.15.4. Module singleton connect() in db.ts was fixed by #284 but
@@ -91,6 +97,15 @@ describe('postgres-engine / search path timeout isolation', () => {
     const vector = stripComments(extractMethod(SRC, 'searchVector'));
     expect(keyword).not.toMatch(/SET\s+statement_timeout\s*=\s*['"]?0/);
     expect(vector).not.toMatch(/SET\s+statement_timeout\s*=\s*['"]?0/);
+  });
+});
+
+describe('postgres-engine / entity graph RAG source-scoped traversal guards', () => {
+  test('traversePathsScoped exists and filters on source_id', () => {
+    const fn = extractMethod(SRC, 'traversePathsScoped');
+    // Structural: implementation must reference pages.source_id (or alias) so it can
+    // enforce source scoping when opts.sourceId !== "__all__".
+    expect(stripComments(fn)).toMatch(/\bsource_id\b/);
   });
 });
 

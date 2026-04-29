@@ -12,6 +12,8 @@ import {
   renewLeaseWithBackoff,
 } from '../src/core/minions/rate-leases.ts';
 
+const PGLITE_HOOK_MS = 30_000;
+
 let engine: PGLiteEngine;
 let queue: MinionQueue;
 let owner: number; // a minion_jobs.id to own leases (FK target)
@@ -21,18 +23,18 @@ beforeAll(async () => {
   await engine.connect({ database_url: '' });
   await engine.initSchema();
   queue = new MinionQueue(engine);
-});
+}, PGLITE_HOOK_MS);
 
 afterAll(async () => {
   await engine.disconnect();
-});
+}, PGLITE_HOOK_MS);
 
 beforeEach(async () => {
   await engine.executeRaw('DELETE FROM subagent_rate_leases');
   await engine.executeRaw('DELETE FROM minion_jobs');
   const j = await queue.add('owner', {});
   owner = j.id;
-});
+}, PGLITE_HOOK_MS);
 
 describe('acquireLease / releaseLease', () => {
   test('single acquire under cap returns lease id', async () => {

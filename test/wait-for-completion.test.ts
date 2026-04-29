@@ -24,7 +24,7 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await engine.executeRaw('DELETE FROM minion_jobs');
-});
+}, 30_000);
 
 describe('waitForCompletion terminal states', () => {
   test('TERMINAL_STATES covers every terminal MinionJobStatus value', () => {
