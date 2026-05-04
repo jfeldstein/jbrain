@@ -30,7 +30,7 @@ The suite calls `validateEntityTaxonomy()` from `src/core/entity-taxonomy.ts`. I
    - Otherwise extend `SPECIAL_PAGE_TYPE_INFERENCE_RULES` in `src/core/entity-taxonomy.ts` and keep order consistent with `PAGE_TYPE_INFERENCE_RULES` (see file comment: special rules vs entity-derived splice).
 3. **`parseMarkdown` / default type** — `inferType()` delegates to `inferPageTypeFromPath()`; no second table in `markdown.ts` for paths.
 4. **Tests** — Add a row to `inferPageTypeFromPath` cases in `test/entity-taxonomy.test.ts` (and any product-specific tests).
-5. **Engines / SQL** — If the kind needs storage, filters, or health slices, update `src/core/` engine paths and any typed filters that mention `PageType`.
+5. **Engines / SQL** — If the kind needs storage, filters, or health slices, update `src/core/` engine paths and any typed filters that mention `PageType`. Path-based search behavior is keyed by slug prefix, not `PageType`; see section B.5 and `src/core/search/source-boost.ts`.
 
 ### B. New or changed `ENTITY_TYPES` row (slug dirs, enrich, backlink / health flags)
 
@@ -38,6 +38,7 @@ The suite calls `validateEntityTaxonomy()` from `src/core/entity-taxonomy.ts`. I
 2. **Directory regex** — `DIR_PATTERN` / `ENTITY_REFERENCE_DIRS` are derived; do not duplicate a parallel dir list in `link-extraction.ts`.
 3. **Wiki / graph behavior** — If links should infer new edge types, see section C.
 4. **Contract tests** — Update the snapshot-style expectations in `test/entity-taxonomy.test.ts` (`ENTITY_TYPES`, `ENTITY_REFERENCE_DIRS`, `DIR_PATTERN`, helpers).
+5. **Hybrid search defaults** — New or renamed top-level slug prefixes affect keyword/vector ranking and default hard-excludes. Update `DEFAULT_SOURCE_BOOSTS` and/or `DEFAULT_HARD_EXCLUDES` in `src/core/search/source-boost.ts` when the new corpus should be boosted, dampened, or hidden from default retrieval. Callers merge env (`GBRAIN_SOURCE_BOOST`, `GBRAIN_SEARCH_EXCLUDE`) and `SearchOpts` via `resolveBoostMap` / `resolveHardExcludes`. SQL fragments are built in `src/core/search/sql-ranking.ts` (`buildSourceFactorCase`, `buildHardExcludeClause`). Tests: `test/sql-ranking.test.ts`; E2E: `test/e2e/search-swamp.test.ts`, `test/e2e/search-exclude.test.ts`.
 
 ### C. New or changed inferred **relationship** label
 
@@ -62,4 +63,7 @@ The suite calls `validateEntityTaxonomy()` from `src/core/entity-taxonomy.ts`. I
 | Entity rows, dirs, inference, relationships | `src/core/entity-taxonomy.ts` |
 | Markdown parse default type | `src/core/markdown.ts` (`inferType` → `inferPageTypeFromPath`) |
 | Link + wikilink extraction | `src/core/link-extraction.ts` |
+| Search slug-prefix boosts, hard excludes, env merge | `src/core/search/source-boost.ts` |
+| Source-factor / exclude SQL fragments (engines) | `src/core/search/sql-ranking.ts` |
 | Taxonomy contract + validators | `test/entity-taxonomy.test.ts` |
+| Source-boost + SQL ranking helpers | `test/sql-ranking.test.ts` |

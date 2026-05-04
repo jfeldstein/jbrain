@@ -24,6 +24,8 @@
  *
  * **Operational checklist** when adding page kinds, taxonomy rows, or relationship labels:
  * `docs/taxonomy-checklist.md`. Cross-check with {@link validateEntityTaxonomy} (must return no messages).
+ * New `referenceDirs` top-level segments: review slug-prefix defaults in
+ * {@link import('./search/source-boost.ts')} (boost / hard-exclude maps) so hybrid search stays aligned.
  */
 import { PAGE_TYPE_VALUES, type PageType } from './types.ts';
 
