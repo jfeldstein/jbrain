@@ -535,7 +535,6 @@ describe('extractFrontmatterLinks — field-map coverage', () => {
     'companies/benchmark': 'companies/benchmark',
     'companies/lead-fund': 'companies/lead-fund',
     'meetings/2026-04-03': 'meetings/2026-04-03',
-    'deal/riveter-seed': 'deal/riveter-seed',
     'source/market-report': 'source/market-report',
     'media/podcast-episode': 'media/podcast-episode',
     'concepts/ai': 'concepts/ai',
@@ -609,19 +608,6 @@ describe('extractFrontmatterLinks — field-map coverage', () => {
     }
   });
 
-  test('deal.investors (multi-dir hint) → INCOMING invested_in', async () => {
-    const { candidates } = await extractFrontmatterLinks(
-      'deal/riveter-seed', 'deal' as never,
-      { investors: ['Sequoia', 'Benchmark'] }, resolver,
-    );
-    expect(candidates).toHaveLength(2);
-    for (const c of candidates) {
-      expect(c.targetSlug).toBe('deal/riveter-seed');
-      expect(c.linkType).toBe(RELATIONSHIP.INVESTED_IN);
-      expect(c.fromSlug).toMatch(/^companies\/(sequoia|benchmark)$/);
-    }
-  });
-
   test('company.investors → INCOMING invested_in', async () => {
     const { candidates } = await extractFrontmatterLinks(
       'companies/stripe', 'company' as never, { investors: ['Sequoia', 'Benchmark'] }, resolver,
@@ -646,14 +632,14 @@ describe('extractFrontmatterLinks — field-map coverage', () => {
     });
   });
 
-  test('deal.lead → INCOMING led_round', async () => {
+  test('company.lead → INCOMING led_round', async () => {
     const { candidates } = await extractFrontmatterLinks(
-      'deal/riveter-seed', 'deal' as never, { lead: 'Lead Fund' }, resolver,
+      'companies/stripe', 'company' as never, { lead: 'Lead Fund' }, resolver,
     );
     expect(candidates).toHaveLength(1);
     expect(candidates[0]).toMatchObject({
       fromSlug: 'companies/lead-fund',
-      targetSlug: 'deal/riveter-seed',
+      targetSlug: 'companies/stripe',
       linkType: RELATIONSHIP.LED_ROUND,
     });
   });
@@ -720,7 +706,7 @@ describe('extractFrontmatterLinks — field-map coverage', () => {
 
   test('array of objects: uses .name, carries role into context', async () => {
     const { candidates } = await extractFrontmatterLinks(
-      'deal/riveter-seed', 'deal' as never,
+      'companies/stripe', 'company' as never,
       { investors: [{ name: 'Sequoia', role: 'lead' }] }, resolver,
     );
     expect(candidates).toHaveLength(1);
@@ -882,11 +868,10 @@ describe('FRONTMATTER_LINK_MAP integrity', () => {
     expect(m!.type).toBe(RELATIONSHIP.ATTENDED);
   });
 
-  test('investors uses multi-dir hint (companies/funds/people)', () => {
+  test('investors uses multi-dir hint (companies/people)', () => {
     const m = FRONTMATTER_LINK_MAP.find(m => m.fields.includes('investors'));
     expect(Array.isArray(m!.dirHint)).toBe(true);
     expect(m!.dirHint).toContain('companies');
-    expect(m!.dirHint).toContain('funds');
     expect(m!.dirHint).toContain('people');
   });
 });

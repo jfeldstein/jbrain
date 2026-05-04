@@ -166,17 +166,6 @@ export const projectRubric: Rubric = {
   ],
 };
 
-export const dealRubric: Rubric = {
-  entityType: 'deal',
-  dimensions: [
-    { name: 'has_company', weight: 0.25, check: p => hasFrontmatterField(p, ['company', 'target']) },
-    { name: 'has_terms', weight: 0.25, check: p => hasFrontmatterField(p, ['terms', 'amount', 'valuation', 'round']) },
-    { name: 'has_date', weight: 0.15, check: p => hasFrontmatterField(p, ['date', 'closed', 'announced']) },
-    { name: 'has_source_urls', weight: 0.15, check: hasSourceUrls },
-    { name: 'has_citations', weight: 0.20, check: hasCitations },
-  ],
-};
-
 export const conceptRubric: Rubric = {
   entityType: 'concept',
   dimensions: [
@@ -222,7 +211,6 @@ const RUBRICS_BY_TYPE = new Map<PageType | 'default', Rubric>([
   ['person', personRubric],
   ['company', companyRubric],
   ['project', projectRubric],
-  ['deal', dealRubric],
   ['concept', conceptRubric],
   ['source', sourceRubric],
   ['media', mediaRubric],

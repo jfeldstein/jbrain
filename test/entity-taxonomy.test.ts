@@ -137,6 +137,24 @@ describe('entity-taxonomy (contract)', () => {
         customBehavior: { backlinks: false, healthMetrics: false },
         enrichment: undefined,
       },
+      {
+        key: 'personal',
+        singular: 'personal',
+        plural: 'personal',
+        dirs: ['personal'],
+        pageType: 'personal',
+        customBehavior: { backlinks: false, healthMetrics: false },
+        enrichment: undefined,
+      },
+      {
+        key: 'finance',
+        singular: 'finance',
+        plural: 'finance',
+        dirs: ['finance'],
+        pageType: 'finance',
+        customBehavior: { backlinks: false, healthMetrics: false },
+        enrichment: undefined,
+      },
     ]);
   });
 
@@ -156,6 +174,8 @@ describe('entity-taxonomy (contract)', () => {
       'civic',
       'source',
       'media',
+      'personal',
+      'finance',
     ]);
   });
 
@@ -199,6 +219,7 @@ describe('entity-taxonomy (contract)', () => {
       { fields: ['key_people'], pageType: 'company', type: 'works_at', direction: 'incoming', dirHint: 'people' },
       { fields: ['partner'], pageType: 'company', type: 'yc_partner', direction: 'incoming', dirHint: 'people' },
       { fields: ['investors'], pageType: 'company', type: 'invested_in', direction: 'incoming', dirHint: ['companies', 'people'] },
+      { fields: ['lead'], pageType: 'company', type: 'led_round', direction: 'incoming', dirHint: ['companies', 'people'] },
       // Meeting pages
       { fields: ['attendees'], pageType: 'meeting', type: 'attended', direction: 'incoming', dirHint: 'people' },
       // Any page type
@@ -211,7 +232,7 @@ describe('entity-taxonomy (contract)', () => {
   test('DIR_PATTERN is the canonical alternation exported for link extraction', () => {
     expect(DIR_PATTERN).toBe(buildEntityDirRegexFragment());
     expect(DIR_PATTERN).toBe(
-      '(?:home-improvement|ai-research|companies|employers|concepts|meetings|projects|project|civics|people|source|topics|civic|media)',
+      '(?:home-improvement|ai-research|companies|employers|concepts|meetings|personal|projects|finance|project|civics|people|source|topics|civic|media)',
     );
   });
 
@@ -223,6 +244,8 @@ describe('entity-taxonomy (contract)', () => {
     expect(isEntityReferenceDir('ai-research')).toBe(true);
     expect(isEntityReferenceDir('home-improvement')).toBe(true);
     expect(isEntityReferenceDir('employers')).toBe(true);
+    expect(isEntityReferenceDir('personal')).toBe(true);
+    expect(isEntityReferenceDir('finance')).toBe(true);
     expect(isEntityReferenceDir('funds')).toBe(false);
     expect(isEntityReferenceDir('deals')).toBe(false);
     expect(isEntityReferenceDir('yc')).toBe(false);
@@ -254,6 +277,7 @@ describe('entity-taxonomy (contract)', () => {
     ['wiki/architecture/foo.md', 'architecture'],
     ['wiki/concepts/foo.md', 'concept'],
     ['wiki/concept/foo.md', 'concept'],
+    ['concepts/seed-rounds.md', 'concept'],
     ['people/alice.md', 'person'],
     ['person/alice.md', 'person'],
     ['companies/acme.md', 'company'],
@@ -270,6 +294,8 @@ describe('entity-taxonomy (contract)', () => {
     ['sources/foo.md', 'source'],
     ['source/foo.md', 'source'],
     ['media/foo.md', 'media'],
+    ['personal/journal.md', 'personal'],
+    ['finance/quarterly.md', 'finance'],
     ['emails/em-0001.md', 'email'],
     ['slack/sl-0001.md', 'slack'],
     ['cal/ev-0001.md', 'calendar-event'],

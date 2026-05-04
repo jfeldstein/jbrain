@@ -3,7 +3,7 @@
  * inference, enrichment slugs, and health metrics.
  *
  * **`referenceDirs` ({@link EntityTypeDefinition})** — Declares which **top-level slug segments**
- * identify this kind of page in wiki links and markdown (`people/…`, `deal/…`). Multiple strings
+ * identify this kind of page in wiki links and markdown (`people/…`, `concepts/…`). Multiple strings
  * on one row are aliases for the same logical type (e.g. singular vs plural folders), not a
  * statement about regex or matching order.
  *
@@ -41,10 +41,10 @@ export interface EntityCustomBehavior {
    *
    * - Reciprocal backlinks are not part of the workflow or would be noisy (many-to-one cites,
    *   glossaries, media, sources). *Examples in {@link ENTITY_TYPES}:*
-   *   `meeting`, `concept`, `deal`, `media`, `source`, `project` typically stay **false** so those
+   *   `meeting`, `concept`, `media`, `source`, `project` typically stay **false** so those
    *   link types do not participate in missing-backlink reports.
-   * - The directory is organizational (`tech`, `finance`, `personal`, `openclaw`) or a catch-all
-   *   (`legacy-entity`): you still want links and extraction, but not enforced mutual linking.
+   * - The directory is organizational (`personal`, `finance`) or otherwise not an Iron Law
+   *   entity target: you still want links and extraction, but not enforced mutual linking.
    * - Enabling it would imply every mention of that kind requires a timeline/backlink row on the
    *   target (cost + false positives for types that are not “entity pages” in the people/company sense).
    *
@@ -66,7 +66,7 @@ export interface EntityCustomBehavior {
    *
    * - The PageType should not drive the **entity slice** of the health dashboard (`doctor`, brain score
    *   components that use entity denominators). *Examples in {@link ENTITY_TYPES}:*
-   *   `meeting`, `concept`, `deal`, `media`, `source`, `project`, `yc`, `civic`, `tech`, … stay **false**
+   *   `meeting`, `concept`, `media`, `source`, `project`, `civic`, `personal`, `finance`, … stay **false**
    *   so volumes of notes, meetings, or namespaces do not dilute or dominate entity coverage KPIs meant
    *   for core contact/company pages.
    * - You have no `pageType` on the row yet; health metrics require a stable DB `pages.type` value—do
@@ -272,7 +272,7 @@ export const ENTITY_TYPES = [
     plural: 'concepts',
     referenceDirs: ['concepts', 'topics'],
     pageType: 'concept',
-    pathInferencePatterns: ['/wiki/concepts/', '/wiki/concept/', '/topics/', '/topic/'],
+    pathInferencePatterns: ['/concepts/', '/wiki/concepts/', '/wiki/concept/', '/topics/', '/topic/'],
     customBehavior: { backlinks: false, healthMetrics: false },
   },
   {
@@ -328,6 +328,24 @@ export const ENTITY_TYPES = [
     referenceDirs: ['media'],
     pageType: 'media',
     pathInferencePatterns: ['/media/'],
+    customBehavior: { backlinks: false, healthMetrics: false },
+  },
+  {
+    key: 'personal',
+    singular: 'personal',
+    plural: 'personal',
+    referenceDirs: ['personal'],
+    pageType: 'personal',
+    pathInferencePatterns: ['/personal/'],
+    customBehavior: { backlinks: false, healthMetrics: false },
+  },
+  {
+    key: 'finance',
+    singular: 'finance',
+    plural: 'finance',
+    referenceDirs: ['finance'],
+    pageType: 'finance',
+    pathInferencePatterns: ['/finance/'],
     customBehavior: { backlinks: false, healthMetrics: false },
   },
 ] as const satisfies readonly EntityTypeDefinition[];
@@ -440,6 +458,7 @@ export const FRONTMATTER_RELATIONSHIP_MAP: readonly FrontmatterLinkFieldMapping[
   { fields: ['key_people'], pageType: 'company', type: RELATIONSHIP.WORKS_AT, direction: 'incoming', dirHint: 'people' },
   { fields: ['partner'], pageType: 'company', type: RELATIONSHIP.YC_PARTNER, direction: 'incoming', dirHint: 'people' },
   { fields: ['investors'], pageType: 'company', type: RELATIONSHIP.INVESTED_IN, direction: 'incoming', dirHint: ['companies', 'people'] },
+  { fields: ['lead'], pageType: 'company', type: RELATIONSHIP.LED_ROUND, direction: 'incoming', dirHint: ['companies', 'people'] },
   // Meeting pages
   { fields: ['attendees'], pageType: 'meeting', type: RELATIONSHIP.ATTENDED, direction: 'incoming', dirHint: 'people' },
   // Any page type
@@ -528,8 +547,8 @@ const PAGE_TYPE_SET = new Set<string>(PAGE_TYPE_VALUES as readonly string[]);
 const INFERRED_RELATIONSHIP_SET = new Set<string>(Object.values(RELATIONSHIP));
 
 function normalizeDirHintSegments(hint: string | readonly string[]): string[] {
-  if (hint === '' || (Array.isArray(hint) && hint.length === 0)) return [];
-  return Array.isArray(hint) ? [...hint] : [hint];
+  if (typeof hint === 'string') return hint === '' ? [] : [hint];
+  return hint.length === 0 ? [] : Array.from(hint);
 }
 
 /**
@@ -542,7 +561,9 @@ export function validateEntityTaxonomy(): string[] {
   const referenceDirOwners = new Map<string, string[]>();
   const entityRefDirSet = new Set<string>(ENTITY_REFERENCE_DIRS as readonly string[]);
 
-  for (const row of ENTITY_TYPES) {
+  // Widen from `as const` row tuples so empty-array checks and enrichment narrowing typecheck.
+  const taxonomyRows = ENTITY_TYPES as unknown as readonly EntityTypeDefinition[];
+  for (const row of taxonomyRows) {
     if (seenKeys.has(row.key)) errors.push(`Duplicate ENTITY_TYPES key: ${row.key}`);
     seenKeys.add(row.key);
 
@@ -617,7 +638,7 @@ export function validateEntityTaxonomy(): string[] {
         `FRONTMATTER_RELATIONSHIP_MAP[${i}] references unknown pageType '${String(m.pageType)}' (not in PAGE_TYPE_VALUES)`,
       );
     }
-    for (const seg of normalizeDirHintSegments(m.dirHint as string | readonly string[])) {
+    for (const seg of normalizeDirHintSegments(m.dirHint)) {
       if (!entityRefDirSet.has(seg)) {
         errors.push(
           `FRONTMATTER_RELATIONSHIP_MAP[${i}] dirHint includes '${seg}', which is not in ENTITY_REFERENCE_DIRS`,

@@ -10,3 +10,6 @@
 # `--timeout=60000` explicitly to cover both per-test and per-hook timeouts.
 # Leaving both in place as belt-and-suspenders.
 timeout = 60_000
+# Parallel test files: Bun's default is 20 concurrent files. The repo's `bun run test`
+# script (package.json) passes `--max-concurrency=4` after typecheck to reduce PGLite
+# / hook timeouts under load. For raw `bun test`, pass the same flag if you see flakes.

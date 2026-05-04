@@ -514,7 +514,7 @@ export function inferLinkType(pageType: PageType, context: string, globalContext
 //   company: "Stripe"                       # person page
 //   companies: [Stripe, Plaid]              # person page (alias of company)
 //   key_people: [Patrick Collison, John]    # company page (incoming works_at)
-//   investors: [{name: Sequoia}, Benchmark] # deal page (incoming invested_in)
+//   investors: [{name: Sequoia}, Benchmark] # company page (incoming invested_in)
 //   attendees: [Pedro, Garry]               # meeting page (incoming attended)
 //
 // Each maps to a typed graph edge. The mapping lives here (one source of
@@ -527,7 +527,7 @@ export function inferLinkType(pageType: PageType, context: string, globalContext
 // [Pedro]` on company/stripe emits `people/pedro -> companies/stripe
 // type=works_at`, preserving subject-of-verb semantics for graph reads.
 //
-// MULTI-DIR HINTS: investors can be companies, funds, or people. The
+// MULTI-DIR HINTS: investors can be companies or people. The
 // resolver tries each hint in order and takes the first match.
 
 export type FrontmatterFieldMapping = FrontmatterLinkFieldMapping;

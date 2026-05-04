@@ -157,7 +157,7 @@ describeE2E('E2E: Search', () => {
 
   test('search quality: precision@5 for known queries', async () => {
     const groundTruth: Record<string, string[]> = {
-      'NovaMind': ['people/sarah-chen', 'companies/novamind', 'deals/novamind-seed'],
+      'NovaMind': ['people/sarah-chen', 'companies/novamind', 'projects/novamind-seed'],
       'hybrid search': ['concepts/hybrid-search', 'concepts/retrieval-augmented-generation'],
       'compiled truth': ['concepts/compiled-truth'],
     };

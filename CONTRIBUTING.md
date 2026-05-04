@@ -6,7 +6,7 @@
 git clone https://github.com/garrytan/gbrain.git
 cd gbrain
 bun install
-bun test
+bun run test
 ```
 
 Requires Bun 1.0+.
@@ -52,7 +52,8 @@ docs/                     Architecture docs
 ## Running tests
 
 ```bash
-bun test                          # all tests (unit + E2E skipped without DB)
+bun run test                      # recommended: jsonb/progress/wasm guards + typecheck + full suite (max-concurrency capped)
+bun test                          # runner only; add --max-concurrency=4 if you see PGLite hook flakes
 bun test test/markdown.test.ts    # specific unit test
 
 # E2E tests (requires Postgres with pgvector)

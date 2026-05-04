@@ -20,7 +20,6 @@ import {
   personRubric,
   companyRubric,
   projectRubric,
-  dealRubric,
   conceptRubric,
   sourceRubric,
   mediaRubric,
@@ -195,7 +194,7 @@ describe('BudgetLedger', () => {
 
 describe('CompletenessScorer — rubric weights', () => {
   test('all seven core rubrics have weights summing to 1', () => {
-    for (const r of [personRubric, companyRubric, projectRubric, dealRubric, conceptRubric, sourceRubric, mediaRubric, defaultRubric]) {
+    for (const r of [personRubric, companyRubric, projectRubric, conceptRubric, sourceRubric, mediaRubric, defaultRubric]) {
       const sum = r.dimensions.reduce((acc, d) => acc + d.weight, 0);
       expect(Math.abs(sum - 1.0)).toBeLessThan(1e-6);
     }

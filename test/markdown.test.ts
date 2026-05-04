@@ -96,7 +96,7 @@ Content
       'wiki/analysis/system-design.md',
       'wiki/guides/setup.md',
       'people/alice.md',
-      'deals/acme-seed.md',
+      'finance/quarterly-review.md',
       'meetings/m-0001.md',
       'slack/sl-0001.md',
     ];

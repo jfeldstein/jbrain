@@ -23,15 +23,15 @@ export const DEFAULT_SOURCE_BOOSTS: Record<string, number> = {
   // Entity pages
   'people/': 1.2,
   'companies/': 1.2,
-  'deals/': 1.2,
   // Notes from real meetings
   'meetings/': 1.1,
   // Ingested third-party content
   'media/articles/': 1.1,
   'media/repos/': 1.1,
   // Neutral baselines (explicit for clarity)
-  'yc/': 1.0,
   'civic/': 1.0,
+  'personal/': 1.0,
+  'finance/': 1.0,
   // Bulk / noisy
   'daily/': 0.8,
   'media/x/': 0.7,

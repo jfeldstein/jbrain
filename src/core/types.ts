@@ -14,8 +14,6 @@ export const PAGE_TYPE_VALUES = [
   'person',
   'company',
   'employer',
-  'deal',
-  'yc',
   'civic',
   'project',
   'concept',
@@ -34,6 +32,8 @@ export const PAGE_TYPE_VALUES = [
   'code',
   'home-improvement',
   'ai-research',
+  'personal',
+  'finance',
 ] as const;
 
 export type PageType = (typeof PAGE_TYPE_VALUES)[number];
