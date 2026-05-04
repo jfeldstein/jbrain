@@ -1,8 +1,9 @@
 import { describe, test, expect } from 'bun:test';
 
-import type { PageType, Link, GraphPath } from '../src/core/types.ts';
+import type { Link, GraphPath } from '../src/core/types.ts';
 import type { LinkBatchInput } from '../src/core/engine.ts';
 
+import { PAGE_TYPE_VALUES, type PageType } from '../src/core/types.ts';
 import {
   ENTITY_TYPES,
   ENTITY_REFERENCE_DIRS,
@@ -22,6 +23,7 @@ import {
   inferPageTypeFromPath,
   inferFsLinkTypeByTopDirs,
   asStoredLinkType,
+  validateEntityTaxonomy,
   type InferredLinkType,
 } from '../src/core/entity-taxonomy.ts';
 
@@ -55,6 +57,15 @@ describe('entity-taxonomy (contract)', () => {
         enrichment: true,
       },
       {
+        key: 'employer',
+        singular: 'employer',
+        plural: 'employers',
+        dirs: ['employers'],
+        pageType: 'employer',
+        customBehavior: { backlinks: false, healthMetrics: false },
+        enrichment: undefined,
+      },
+      {
         key: 'meeting',
         singular: 'meeting',
         plural: 'meetings',
@@ -73,29 +84,11 @@ describe('entity-taxonomy (contract)', () => {
         enrichment: undefined,
       },
       {
-        key: 'deal',
-        singular: 'deal',
-        plural: 'deals',
-        dirs: ['deal', 'deals'],
-        pageType: 'deal',
-        customBehavior: { backlinks: false, healthMetrics: false },
-        enrichment: undefined,
-      },
-      {
-        key: 'fund',
-        singular: 'fund',
-        plural: 'funds',
-        dirs: ['funds', 'fund'],
-        pageType: undefined,
-        customBehavior: { backlinks: false, healthMetrics: false },
-        enrichment: undefined,
-      },
-      {
-        key: 'civic',
-        singular: 'civic',
-        plural: 'civic',
-        dirs: ['civic'],
-        pageType: 'civic',
+        key: 'ai-research',
+        singular: 'AI research concept',
+        plural: 'AI research concepts',
+        dirs: ['ai-research'],
+        pageType: 'ai-research',
         customBehavior: { backlinks: false, healthMetrics: false },
         enrichment: undefined,
       },
@@ -105,6 +98,24 @@ describe('entity-taxonomy (contract)', () => {
         plural: 'projects',
         dirs: ['project', 'projects'],
         pageType: 'project',
+        customBehavior: { backlinks: false, healthMetrics: false },
+        enrichment: undefined,
+      },
+      {
+        key: 'home-improvement',
+        singular: 'home improvement project',
+        plural: 'home improvement projects',
+        dirs: ['home-improvement'],
+        pageType: 'home-improvement',
+        customBehavior: { backlinks: false, healthMetrics: false },
+        enrichment: undefined,
+      },
+      {
+        key: 'civics',
+        singular: 'civic entity',
+        plural: 'civic entities',
+        dirs: ['civics', 'civic'],
+        pageType: 'civic',
         customBehavior: { backlinks: false, healthMetrics: false },
         enrichment: undefined,
       },
@@ -126,60 +137,6 @@ describe('entity-taxonomy (contract)', () => {
         customBehavior: { backlinks: false, healthMetrics: false },
         enrichment: undefined,
       },
-      {
-        key: 'yc',
-        singular: 'yc page',
-        plural: 'yc pages',
-        dirs: ['yc'],
-        pageType: 'yc',
-        customBehavior: { backlinks: false, healthMetrics: false },
-        enrichment: undefined,
-      },
-      {
-        key: 'tech',
-        singular: 'tech page',
-        plural: 'tech pages',
-        dirs: ['tech'],
-        pageType: undefined,
-        customBehavior: { backlinks: false, healthMetrics: false },
-        enrichment: undefined,
-      },
-      {
-        key: 'finance',
-        singular: 'finance page',
-        plural: 'finance pages',
-        dirs: ['finance'],
-        pageType: undefined,
-        customBehavior: { backlinks: false, healthMetrics: false },
-        enrichment: undefined,
-      },
-      {
-        key: 'personal',
-        singular: 'personal page',
-        plural: 'personal pages',
-        dirs: ['personal'],
-        pageType: undefined,
-        customBehavior: { backlinks: false, healthMetrics: false },
-        enrichment: undefined,
-      },
-      {
-        key: 'openclaw',
-        singular: 'openclaw page',
-        plural: 'openclaw pages',
-        dirs: ['openclaw'],
-        pageType: undefined,
-        customBehavior: { backlinks: false, healthMetrics: false },
-        enrichment: undefined,
-      },
-      {
-        key: 'legacy-entity',
-        singular: 'legacy entity',
-        plural: 'legacy entities',
-        dirs: ['entities'],
-        pageType: undefined,
-        customBehavior: { backlinks: false, healthMetrics: false },
-        enrichment: undefined,
-      },
     ]);
   });
 
@@ -187,24 +144,18 @@ describe('entity-taxonomy (contract)', () => {
     expect(ENTITY_REFERENCE_DIRS).toEqual([
       'people',
       'companies',
+      'employers',
       'meetings',
       'concepts',
       'topics',
-      'deal',
-      'deals',
-      'funds',
-      'fund',
-      'civic',
+      'ai-research',
       'project',
       'projects',
+      'home-improvement',
+      'civics',
+      'civic',
       'source',
       'media',
-      'yc',
-      'tech',
-      'finance',
-      'personal',
-      'openclaw',
-      'entities',
     ]);
   });
 
@@ -241,16 +192,13 @@ describe('entity-taxonomy (contract)', () => {
 
   test('FRONTMATTER_RELATIONSHIP_MAP matches link-extraction.ts behavior', () => {
     expect(FRONTMATTER_RELATIONSHIP_MAP).toEqual([
-      // Person pages → companies
+      // Person pages → companies / employers
       { fields: ['company', 'companies'], pageType: 'person', type: 'works_at', direction: 'outgoing', dirHint: 'companies' },
       { fields: ['founded'], pageType: 'person', type: 'founded', direction: 'outgoing', dirHint: 'companies' },
       // Company pages (incoming relationships — subject of the verb lives elsewhere)
       { fields: ['key_people'], pageType: 'company', type: 'works_at', direction: 'incoming', dirHint: 'people' },
       { fields: ['partner'], pageType: 'company', type: 'yc_partner', direction: 'incoming', dirHint: 'people' },
-      { fields: ['investors'], pageType: 'company', type: 'invested_in', direction: 'incoming', dirHint: ['companies', 'funds', 'people'] },
-      // Deal pages (all incoming — deals are the object)
-      { fields: ['investors'], pageType: 'deal', type: 'invested_in', direction: 'incoming', dirHint: ['companies', 'funds', 'people'] },
-      { fields: ['lead'], pageType: 'deal', type: 'led_round', direction: 'incoming', dirHint: ['companies', 'funds', 'people'] },
+      { fields: ['investors'], pageType: 'company', type: 'invested_in', direction: 'incoming', dirHint: ['companies', 'people'] },
       // Meeting pages
       { fields: ['attendees'], pageType: 'meeting', type: 'attended', direction: 'incoming', dirHint: 'people' },
       // Any page type
@@ -263,15 +211,21 @@ describe('entity-taxonomy (contract)', () => {
   test('DIR_PATTERN is the canonical alternation exported for link extraction', () => {
     expect(DIR_PATTERN).toBe(buildEntityDirRegexFragment());
     expect(DIR_PATTERN).toBe(
-      '(?:companies|concepts|entities|meetings|openclaw|personal|projects|finance|project|people|source|topics|civic|deals|funds|media|deal|fund|tech|yc)',
+      '(?:home-improvement|ai-research|companies|employers|concepts|meetings|projects|project|civics|people|source|topics|civic|media)',
     );
   });
 
   test('dir membership helpers are consistent', () => {
     expect(isEntityReferenceDir('people')).toBe(true);
-    expect(isEntityReferenceDir('funds')).toBe(true);
     expect(isEntityReferenceDir('topics')).toBe(true);
-    expect(isEntityReferenceDir('deals')).toBe(true);
+    expect(isEntityReferenceDir('civics')).toBe(true);
+    expect(isEntityReferenceDir('civic')).toBe(true);
+    expect(isEntityReferenceDir('ai-research')).toBe(true);
+    expect(isEntityReferenceDir('home-improvement')).toBe(true);
+    expect(isEntityReferenceDir('employers')).toBe(true);
+    expect(isEntityReferenceDir('funds')).toBe(false);
+    expect(isEntityReferenceDir('deals')).toBe(false);
+    expect(isEntityReferenceDir('yc')).toBe(false);
 
     expect(isBacklinkEntityDir('people')).toBe(true);
     expect(isBacklinkEntityDir('companies')).toBe(true);
@@ -293,23 +247,24 @@ describe('entity-taxonomy (contract)', () => {
 
   test.each([
     ['projects/blog/writing/essay.md', 'writing'],
-    ['tech/wiki/analysis/foo.md', 'analysis'],
-    ['tech/wiki/guides/foo.md', 'guide'],
-    ['tech/wiki/guide/foo.md', 'guide'],
-    ['tech/wiki/hardware/foo.md', 'hardware'],
-    ['tech/wiki/architecture/foo.md', 'architecture'],
-    ['tech/wiki/concepts/foo.md', 'concept'],
-    ['tech/wiki/concept/foo.md', 'concept'],
+    ['wiki/analysis/foo.md', 'analysis'],
+    ['wiki/guides/foo.md', 'guide'],
+    ['wiki/guide/foo.md', 'guide'],
+    ['wiki/hardware/foo.md', 'hardware'],
+    ['wiki/architecture/foo.md', 'architecture'],
+    ['wiki/concepts/foo.md', 'concept'],
+    ['wiki/concept/foo.md', 'concept'],
     ['people/alice.md', 'person'],
     ['person/alice.md', 'person'],
     ['companies/acme.md', 'company'],
     ['company/acme.md', 'company'],
-    ['deals/acme-seed.md', 'deal'],
-    ['deal/acme-seed.md', 'deal'],
+    ['employers/invisible.md', 'employer'],
     ['topics/ml-safety.md', 'concept'],
     ['topic/ml-safety.md', 'concept'],
-    ['yc/fund-a.md', 'yc'],
+    ['ai-research/rl-basics.md', 'ai-research'],
+    ['civics/vt-wastewater.md', 'civic'],
     ['civic/city.md', 'civic'],
+    ['home-improvement/solar-array.md', 'home-improvement'],
     ['projects/foo.md', 'project'],
     ['project/foo.md', 'project'],
     ['sources/foo.md', 'source'],
@@ -331,14 +286,10 @@ describe('entity-taxonomy (contract)', () => {
     expect(FS_LINK_TYPE_RULES).toEqual([
       { fromDir: 'people', toDir: 'companies', type: 'founded', whenFrontmatterArrayField: 'founded' },
       { fromDir: 'people', toDir: 'companies', type: 'works_at' },
-      { fromDir: 'people', toDir: 'deals', type: 'involved_in' },
-      { fromDir: 'deals', toDir: 'companies', type: 'deal_for' },
       { fromDir: 'meetings', toDir: 'people', type: 'attended' },
     ]);
     expect(inferFsLinkTypeByTopDirs('people', 'companies', {})).toBe('works_at');
     expect(inferFsLinkTypeByTopDirs('people', 'companies', { founded: ['acme'] })).toBe('founded');
-    expect(inferFsLinkTypeByTopDirs('people', 'deals', {})).toBe('involved_in');
-    expect(inferFsLinkTypeByTopDirs('deals', 'companies', {})).toBe('deal_for');
     expect(inferFsLinkTypeByTopDirs('meetings', 'people', {})).toBe('attended');
     expect(inferFsLinkTypeByTopDirs('concepts', 'people', {})).toBe('mentions');
   });
@@ -382,6 +333,28 @@ describe('entity-taxonomy (contract)', () => {
       link_type: 'arbitrary_api_input',
     };
     expect(batch.link_type).toBe('arbitrary_api_input');
+  });
+});
+
+describe('entity-taxonomy (validateEntityTaxonomy)', () => {
+  test('taxonomy is structurally valid (empty diagnostics)', () => {
+    expect(validateEntityTaxonomy()).toEqual([]);
+  });
+
+  test('PAGE_TYPE_VALUES has no duplicates (matches derived PageType union)', () => {
+    const unique = new Set(PAGE_TYPE_VALUES);
+    expect(unique.size).toBe(PAGE_TYPE_VALUES.length);
+    const sample: PageType = PAGE_TYPE_VALUES[PAGE_TYPE_VALUES.length - 1]!;
+    expect(unique.has(sample)).toBe(true);
+  });
+
+  test('every ENTITY_TYPES pageType appears in PAGE_TYPE_VALUES', () => {
+    const allowed = new Set<string>(PAGE_TYPE_VALUES as readonly string[]);
+    for (const row of ENTITY_TYPES) {
+      if ('pageType' in row && row.pageType !== undefined) {
+        expect(allowed.has(row.pageType)).toBe(true);
+      }
+    }
   });
 });
 

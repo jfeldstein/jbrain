@@ -21,8 +21,11 @@
  * differently depending on rule order. Prefer mutually exclusive fragments; curate
  * {@link SPECIAL_PAGE_TYPE_INFERENCE_RULES} vs entity-derived rules; add explicit precedence on
  * {@link PageTypeInferenceRule} if needed; or evolve the helper to compare longest match first.
+ *
+ * **Operational checklist** when adding page kinds, taxonomy rows, or relationship labels:
+ * `docs/taxonomy-checklist.md`. Cross-check with {@link validateEntityTaxonomy} (must return no messages).
  */
-import type { PageType } from './types.ts';
+import { PAGE_TYPE_VALUES, type PageType } from './types.ts';
 
 export interface EntityCustomBehavior {
   /**
@@ -244,6 +247,15 @@ export const ENTITY_TYPES = [
     enrichment: true,
   },
   {
+    key: 'employer',
+    singular: 'employer',
+    plural: 'employers',
+    referenceDirs: ['employers'],
+    pageType: 'employer',
+    pathInferencePatterns: ['/employers/', '/employer/'],
+    customBehavior: { backlinks: false, healthMetrics: false },
+  },
+  {
     key: 'meeting',
     singular: 'meeting',
     plural: 'meetings',
@@ -262,29 +274,12 @@ export const ENTITY_TYPES = [
     customBehavior: { backlinks: false, healthMetrics: false },
   },
   {
-    key: 'deal',
-    singular: 'deal',
-    plural: 'deals',
-    referenceDirs: ['deal', 'deals'],
-    pageType: 'deal',
-    pathInferencePatterns: ['/deals/', '/deal/'],
-    customBehavior: { backlinks: false, healthMetrics: false },
-  },
-  {
-    key: 'fund',
-    singular: 'fund',
-    plural: 'funds',
-    referenceDirs: ['funds', 'fund'],
-    pathInferencePatterns: [],
-    customBehavior: { backlinks: false, healthMetrics: false },
-  },
-  {
-    key: 'civic',
-    singular: 'civic',
-    plural: 'civic',
-    referenceDirs: ['civic'],
-    pageType: 'civic',
-    pathInferencePatterns: ['/civic/'],
+    key: 'ai-research',
+    singular: 'AI research concept',
+    plural: 'AI research concepts',
+    referenceDirs: ['ai-research'],
+    pageType: 'ai-research',
+    pathInferencePatterns: ['/ai-research/'],
     customBehavior: { backlinks: false, healthMetrics: false },
   },
   {
@@ -294,6 +289,25 @@ export const ENTITY_TYPES = [
     referenceDirs: ['project', 'projects'],
     pageType: 'project',
     pathInferencePatterns: ['/projects/', '/project/'],
+    customBehavior: { backlinks: false, healthMetrics: false },
+  },
+  {
+    key: 'home-improvement',
+    singular: 'home improvement project',
+    plural: 'home improvement projects',
+    referenceDirs: ['home-improvement'],
+    pageType: 'home-improvement',
+    pathInferencePatterns: ['/home-improvement/'],
+    customBehavior: { backlinks: false, healthMetrics: false },
+  },
+  {
+    // 'civic' kept as legacy alias dir; pageType stays 'civic' for DB compat.
+    key: 'civics',
+    singular: 'civic entity',
+    plural: 'civic entities',
+    referenceDirs: ['civics', 'civic'],
+    pageType: 'civic',
+    pathInferencePatterns: ['/civics/', '/civic/'],
     customBehavior: { backlinks: false, healthMetrics: false },
   },
   {
@@ -312,55 +326,6 @@ export const ENTITY_TYPES = [
     referenceDirs: ['media'],
     pageType: 'media',
     pathInferencePatterns: ['/media/'],
-    customBehavior: { backlinks: false, healthMetrics: false },
-  },
-  {
-    key: 'yc',
-    singular: 'yc page',
-    plural: 'yc pages',
-    referenceDirs: ['yc'],
-    pageType: 'yc',
-    pathInferencePatterns: ['/yc/'],
-    customBehavior: { backlinks: false, healthMetrics: false },
-  },
-  {
-    key: 'tech',
-    singular: 'tech page',
-    plural: 'tech pages',
-    referenceDirs: ['tech'],
-    pathInferencePatterns: [],
-    customBehavior: { backlinks: false, healthMetrics: false },
-  },
-  {
-    key: 'finance',
-    singular: 'finance page',
-    plural: 'finance pages',
-    referenceDirs: ['finance'],
-    pathInferencePatterns: [],
-    customBehavior: { backlinks: false, healthMetrics: false },
-  },
-  {
-    key: 'personal',
-    singular: 'personal page',
-    plural: 'personal pages',
-    referenceDirs: ['personal'],
-    pathInferencePatterns: [],
-    customBehavior: { backlinks: false, healthMetrics: false },
-  },
-  {
-    key: 'openclaw',
-    singular: 'openclaw page',
-    plural: 'openclaw pages',
-    referenceDirs: ['openclaw'],
-    pathInferencePatterns: [],
-    customBehavior: { backlinks: false, healthMetrics: false },
-  },
-  {
-    key: 'legacy-entity',
-    singular: 'legacy entity',
-    plural: 'legacy entities',
-    referenceDirs: ['entities'],
-    pathInferencePatterns: [],
     customBehavior: { backlinks: false, healthMetrics: false },
   },
 ] as const satisfies readonly EntityTypeDefinition[];
@@ -462,22 +427,17 @@ export function enrichmentSlugPrefixForEntityType(type: EnrichmentRequestType): 
 export const FS_LINK_TYPE_RULES = [
   { fromDir: 'people', toDir: 'companies', type: RELATIONSHIP.FOUNDED, whenFrontmatterArrayField: 'founded' },
   { fromDir: 'people', toDir: 'companies', type: RELATIONSHIP.WORKS_AT },
-  { fromDir: 'people', toDir: 'deals', type: RELATIONSHIP.INVOLVED_IN },
-  { fromDir: 'deals', toDir: 'companies', type: RELATIONSHIP.DEAL_FOR },
   { fromDir: 'meetings', toDir: 'people', type: RELATIONSHIP.ATTENDED },
 ] as const;
 
 export const FRONTMATTER_RELATIONSHIP_MAP: readonly FrontmatterLinkFieldMapping[] = [
-  // Person pages → companies
+  // Person pages → companies / employers
   { fields: ['company', 'companies'], pageType: 'person', type: RELATIONSHIP.WORKS_AT, direction: 'outgoing', dirHint: 'companies' },
   { fields: ['founded'], pageType: 'person', type: RELATIONSHIP.FOUNDED, direction: 'outgoing', dirHint: 'companies' },
   // Company pages (incoming relationships — subject of the verb lives elsewhere)
   { fields: ['key_people'], pageType: 'company', type: RELATIONSHIP.WORKS_AT, direction: 'incoming', dirHint: 'people' },
   { fields: ['partner'], pageType: 'company', type: RELATIONSHIP.YC_PARTNER, direction: 'incoming', dirHint: 'people' },
-  { fields: ['investors'], pageType: 'company', type: RELATIONSHIP.INVESTED_IN, direction: 'incoming', dirHint: ['companies', 'funds', 'people'] },
-  // Deal pages (all incoming — deals are the object)
-  { fields: ['investors'], pageType: 'deal', type: RELATIONSHIP.INVESTED_IN, direction: 'incoming', dirHint: ['companies', 'funds', 'people'] },
-  { fields: ['lead'], pageType: 'deal', type: RELATIONSHIP.LED_ROUND, direction: 'incoming', dirHint: ['companies', 'funds', 'people'] },
+  { fields: ['investors'], pageType: 'company', type: RELATIONSHIP.INVESTED_IN, direction: 'incoming', dirHint: ['companies', 'people'] },
   // Meeting pages
   { fields: ['attendees'], pageType: 'meeting', type: RELATIONSHIP.ATTENDED, direction: 'incoming', dirHint: 'people' },
   // Any page type
@@ -560,5 +520,124 @@ export function inferFsLinkTypeByTopDirs(
     return rule.type;
   }
   return RELATIONSHIP.MENTIONS;
+}
+
+const PAGE_TYPE_SET = new Set<string>(PAGE_TYPE_VALUES as readonly string[]);
+const INFERRED_RELATIONSHIP_SET = new Set<string>(Object.values(RELATIONSHIP));
+
+function normalizeDirHintSegments(hint: string | readonly string[]): string[] {
+  if (hint === '' || (Array.isArray(hint) && hint.length === 0)) return [];
+  return Array.isArray(hint) ? [...hint] : [hint];
+}
+
+/**
+ * Structural consistency checks for `ENTITY_TYPES`, inference rules, frontmatter maps, and FS link typing.
+ * Empty return = valid. Messages are human-readable for tests and CI logs.
+ */
+export function validateEntityTaxonomy(): string[] {
+  const errors: string[] = [];
+  const seenKeys = new Set<string>();
+  const referenceDirOwners = new Map<string, string[]>();
+  const entityRefDirSet = new Set<string>(ENTITY_REFERENCE_DIRS as readonly string[]);
+
+  for (const row of ENTITY_TYPES) {
+    if (seenKeys.has(row.key)) errors.push(`Duplicate ENTITY_TYPES key: ${row.key}`);
+    seenKeys.add(row.key);
+
+    if (row.referenceDirs.length === 0) {
+      errors.push(`ENTITY_TYPES row '${row.key}' has empty referenceDirs`);
+    }
+
+    if ('pageType' in row && row.pageType !== undefined) {
+      if (!PAGE_TYPE_SET.has(row.pageType)) {
+        errors.push(
+          `ENTITY_TYPES row '${row.key}' has pageType '${String(row.pageType)}' not listed in PAGE_TYPE_VALUES (types.ts)`,
+        );
+      }
+    } else if ('enrichment' in row && row.enrichment === true) {
+      errors.push(`ENTITY_TYPES row '${row.key}' has enrichment:true but no pageType`);
+    }
+
+    if ('enrichment' in row && row.enrichment === true) {
+      if (!row.referenceDirs.length) {
+        errors.push(`ENTITY_TYPES row '${row.key}' is enrichable but referenceDirs is empty`);
+      }
+      if (!('pageType' in row) || row.pageType === undefined) {
+        errors.push(`ENTITY_TYPES row '${row.key}' is enrichable but pageType is missing`);
+      }
+    }
+
+    for (const d of row.referenceDirs) {
+      const owners = referenceDirOwners.get(d) ?? [];
+      owners.push(row.key);
+      referenceDirOwners.set(d, owners);
+    }
+  }
+
+  for (const [dir, keys] of referenceDirOwners) {
+    if (keys.length > 1) {
+      errors.push(`referenceDir '${dir}' is claimed by multiple ENTITY_TYPES rows: ${keys.join(', ')}`);
+    }
+  }
+
+  for (let i = 0; i < PAGE_TYPE_INFERENCE_RULES.length; i++) {
+    const rule = PAGE_TYPE_INFERENCE_RULES[i];
+    if (!rule) continue;
+    if (!PAGE_TYPE_SET.has(rule.type)) {
+      errors.push(
+        `PAGE_TYPE_INFERENCE_RULES[${i}] references unknown PageType '${String(rule.type)}' (not in PAGE_TYPE_VALUES)`,
+      );
+    }
+    if (rule.patterns.length === 0) {
+      errors.push(`PAGE_TYPE_INFERENCE_RULES[${i}] (type '${rule.type}') has empty patterns`);
+    }
+    for (let j = 0; j < rule.patterns.length; j++) {
+      const p = rule.patterns[j];
+      if (!p || p.trim() === '') {
+        errors.push(`PAGE_TYPE_INFERENCE_RULES[${i}] (type '${rule.type}') has empty pattern at index ${j}`);
+      }
+    }
+  }
+
+  for (let i = 0; i < FRONTMATTER_RELATIONSHIP_MAP.length; i++) {
+    const m = FRONTMATTER_RELATIONSHIP_MAP[i];
+    if (!m) continue;
+    if (!INFERRED_RELATIONSHIP_SET.has(m.type)) {
+      errors.push(
+        `FRONTMATTER_RELATIONSHIP_MAP[${i}] uses unknown relationship '${String(m.type)}' (not a RELATIONSHIP value)`,
+      );
+    }
+    if (m.fields.length === 0) {
+      errors.push(`FRONTMATTER_RELATIONSHIP_MAP[${i}] has empty fields array`);
+    }
+    if (m.pageType !== undefined && !PAGE_TYPE_SET.has(m.pageType)) {
+      errors.push(
+        `FRONTMATTER_RELATIONSHIP_MAP[${i}] references unknown pageType '${String(m.pageType)}' (not in PAGE_TYPE_VALUES)`,
+      );
+    }
+    for (const seg of normalizeDirHintSegments(m.dirHint as string | readonly string[])) {
+      if (!entityRefDirSet.has(seg)) {
+        errors.push(
+          `FRONTMATTER_RELATIONSHIP_MAP[${i}] dirHint includes '${seg}', which is not in ENTITY_REFERENCE_DIRS`,
+        );
+      }
+    }
+  }
+
+  for (let i = 0; i < FS_LINK_TYPE_RULES.length; i++) {
+    const r = FS_LINK_TYPE_RULES[i];
+    if (!r) continue;
+    if (!INFERRED_RELATIONSHIP_SET.has(r.type)) {
+      errors.push(`FS_LINK_TYPE_RULES[${i}] uses unknown relationship '${String(r.type)}'`);
+    }
+    if (!entityRefDirSet.has(r.fromDir)) {
+      errors.push(`FS_LINK_TYPE_RULES[${i}] fromDir '${r.fromDir}' is not in ENTITY_REFERENCE_DIRS`);
+    }
+    if (!entityRefDirSet.has(r.toDir)) {
+      errors.push(`FS_LINK_TYPE_RULES[${i}] toDir '${r.toDir}' is not in ENTITY_REFERENCE_DIRS`);
+    }
+  }
+
+  return errors;
 }
 

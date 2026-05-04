@@ -5,7 +5,38 @@
 // (e.g. "attended meetings" vs "received emails").
 // `code` (v0.19.0): tree-sitter-chunked source files; consumed by code-def /
 // code-refs / code-callers / code-callees + Cathedral II two-pass retrieval.
-export type PageType = 'person' | 'company' | 'deal' | 'yc' | 'civic' | 'project' | 'concept' | 'source' | 'media' | 'writing' | 'analysis' | 'guide' | 'hardware' | 'architecture' | 'meeting' | 'note' | 'email' | 'slack' | 'calendar-event' | 'code';
+/**
+ * Canonical list of `pages.type` values. **`export type PageType` is derived from this array**
+ * so runtime validators (`validateEntityTaxonomy` in `entity-taxonomy.ts`) stay aligned with the
+ * type system. When adding a kind, append here first, then follow `docs/taxonomy-checklist.md`.
+ */
+export const PAGE_TYPE_VALUES = [
+  'person',
+  'company',
+  'employer',
+  'deal',
+  'yc',
+  'civic',
+  'project',
+  'concept',
+  'source',
+  'media',
+  'writing',
+  'analysis',
+  'guide',
+  'hardware',
+  'architecture',
+  'meeting',
+  'note',
+  'email',
+  'slack',
+  'calendar-event',
+  'code',
+  'home-improvement',
+  'ai-research',
+] as const;
+
+export type PageType = (typeof PAGE_TYPE_VALUES)[number];
 
 export interface Page {
   id: number;
