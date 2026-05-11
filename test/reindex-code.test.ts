@@ -14,6 +14,7 @@
 import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
 import { PGLiteEngine } from '../src/core/pglite-engine.ts';
 import { runReindexCode } from '../src/commands/reindex-code.ts';
+import { shouldShowOpenAiUsdCostEstimate } from '../src/core/embedding.ts';
 
 describe('Layer 13 E2 — runReindexCode', () => {
   let engine: PGLiteEngine;
@@ -76,8 +77,13 @@ describe('Layer 13 E2 — runReindexCode', () => {
     expect(result.status).toBe('dry_run');
     expect(result.reindexed).toBe(0);
     expect(result.totalTokens).toBeGreaterThan(0);
-    expect(result.costUsd).toBeGreaterThanOrEqual(0);
-    expect(result.model).toBe('text-embedding-3-large');
+    if (shouldShowOpenAiUsdCostEstimate()) {
+      expect(result.costUsd).not.toBeNull();
+      expect(result.costUsd as number).toBeGreaterThanOrEqual(0);
+    } else {
+      expect(result.costUsd).toBeNull();
+    }
+    expect(result.model).toBeTruthy();
   });
 
   test('reindex walks every code page, failures counted per-slug', async () => {

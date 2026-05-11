@@ -2,14 +2,21 @@
  * Embedding Service
  * Ported from production Ruby implementation (embedding_service.rb, 190 LOC)
  *
- * OpenAI text-embedding-3-large at 1536 dimensions.
+ * Default: OpenAI text-embedding-3-large at 1536 dimensions.
+ * Alternate providers: OpenRouter, Ollama (OpenAI-compatible /v1), via env — see embedding-config.ts.
  * Retry with exponential backoff (4s base, 120s cap, 5 retries).
  * 8000 character input truncation.
  */
 
 import OpenAI from 'openai';
+import {
+  DEFAULT_EMBEDDING_MODEL,
+  getActiveEmbeddingModel,
+  isEmbeddingConfigured,
+  resolveEmbeddingSettings,
+  shouldShowOpenAiUsdCostEstimate,
+} from './embedding-config.ts';
 
-const MODEL = 'text-embedding-3-large';
 const DIMENSIONS = 1536;
 const MAX_CHARS = 8000;
 const MAX_RETRIES = 5;
@@ -17,14 +24,52 @@ const BASE_DELAY_MS = 4000;
 const MAX_DELAY_MS = 120000;
 const BATCH_SIZE = 100;
 
+/** Exported for unit tests: ensures provider vectors match pgvector column width. */
+export function assertEmbeddingVectorsMatchBrain(vectors: Float32Array[], expectedDim = DIMENSIONS): void {
+  for (const v of vectors) {
+    if (v.length !== expectedDim) {
+      throw new Error(
+        `Embedding provider returned length ${v.length} but this brain expects ${expectedDim} dimensions (pgvector column width).`,
+      );
+    }
+  }
+}
+
 let client: OpenAI | null = null;
+let clientFingerprint: string | null = null;
+
+function fingerprintClient(s: ReturnType<typeof resolveEmbeddingSettings>): string {
+  return JSON.stringify({
+    baseURL: s.baseURL,
+    apiKey: s.apiKey,
+    omitDimensionsParam: s.omitDimensionsParam,
+    defaultHeaders: s.defaultHeaders,
+  });
+}
 
 function getClient(): OpenAI {
-  if (!client) {
-    client = new OpenAI();
+  const s = resolveEmbeddingSettings(process.env);
+  const fp = fingerprintClient(s);
+  if (!client || fp !== clientFingerprint) {
+    clientFingerprint = fp;
+    client = new OpenAI({
+      apiKey: s.apiKey.length > 0 ? s.apiKey : 'missing-api-key',
+      baseURL: s.baseURL,
+      defaultHeaders: s.defaultHeaders,
+    });
   }
   return client;
 }
+
+/** Clears cached OpenAI client (tests or env reload). */
+export function resetEmbeddingClientForTests(): void {
+  client = null;
+  clientFingerprint = null;
+}
+
+export { getActiveEmbeddingModel, isEmbeddingConfigured, shouldShowOpenAiUsdCostEstimate };
+export { resolveEmbeddingSettings } from './embedding-config.ts';
+export type { ResolvedEmbeddingSettings } from './embedding-config.ts';
 
 export async function embed(text: string): Promise<Float32Array> {
   const truncated = text.slice(0, MAX_CHARS);
@@ -60,18 +105,32 @@ export async function embedBatch(
 }
 
 async function embedBatchWithRetry(texts: string[]): Promise<Float32Array[]> {
+  const s = resolveEmbeddingSettings(process.env);
+  if (!s.apiKey) {
+    throw new Error('No embedding API key configured. Set OPENAI_API_KEY, OPENROUTER_API_KEY (OpenRouter), or GBRAIN_EMBEDDING_API_KEY.');
+  }
+
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     try {
-      const response = await getClient().embeddings.create({
-        model: MODEL,
+      const body: OpenAI.EmbeddingCreateParams = {
+        model: s.model,
         input: texts,
-        dimensions: DIMENSIONS,
-      });
+      };
+      if (!s.omitDimensionsParam) {
+        body.dimensions = DIMENSIONS;
+      }
+
+      const response = await getClient().embeddings.create(body);
 
       // Sort by index to maintain order
       const sorted = response.data.sort((a, b) => a.index - b.index);
-      return sorted.map(d => new Float32Array(d.embedding));
+      const vectors = sorted.map(d => new Float32Array(d.embedding));
+      assertEmbeddingVectorsMatchBrain(vectors);
+      return vectors;
     } catch (e: unknown) {
+      if (e instanceof Error && e.message.includes('this brain expects')) {
+        throw e;
+      }
       if (attempt === MAX_RETRIES - 1) throw e;
 
       // Check for rate limit with Retry-After header
@@ -104,7 +163,9 @@ function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-export { MODEL as EMBEDDING_MODEL, DIMENSIONS as EMBEDDING_DIMENSIONS };
+/** Default embedding model id (OpenAI). Use getActiveEmbeddingModel() for env-resolved id. */
+export const EMBEDDING_MODEL = DEFAULT_EMBEDDING_MODEL;
+export const EMBEDDING_DIMENSIONS = DIMENSIONS;
 
 /**
  * v0.20.0 Cathedral II Layer 8 (D1): USD cost per 1k tokens for

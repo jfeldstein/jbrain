@@ -26,7 +26,11 @@
 import type { BrainEngine } from '../core/engine.ts';
 import { importCodeFile } from '../core/import-file.ts';
 import { estimateTokens } from '../core/chunkers/code.ts';
-import { EMBEDDING_MODEL, estimateEmbeddingCostUsd } from '../core/embedding.ts';
+import {
+  estimateEmbeddingCostUsd,
+  getActiveEmbeddingModel,
+  shouldShowOpenAiUsdCostEstimate,
+} from '../core/embedding.ts';
 import { errorFor, serializeError } from '../core/errors.ts';
 import { createInterface } from 'readline';
 import { createProgress } from '../core/progress.ts';
@@ -50,7 +54,8 @@ export interface ReindexCodeResult {
   skipped: number;
   failed: number;
   totalTokens: number;
-  costUsd: number;
+  /** Null when the active embedding provider is not the OpenAI default (no USD token rate). */
+  costUsd: number | null;
   model: string;
   failures?: Array<{ slug: string; error: string }>;
 }
@@ -136,7 +141,9 @@ export async function runReindexCode(
   const batchSize = opts.batchSize ?? 100;
 
   const { totalTokens, totalPages } = await estimateReindexCost(engine, opts.sourceId, batchSize);
-  const costUsd = estimateEmbeddingCostUsd(totalTokens);
+  const model = getActiveEmbeddingModel();
+  const showUsd = shouldShowOpenAiUsdCostEstimate();
+  const costUsd = showUsd ? estimateEmbeddingCostUsd(totalTokens) : null;
 
   if (opts.dryRun) {
     return {
@@ -147,7 +154,7 @@ export async function runReindexCode(
       failed: 0,
       totalTokens,
       costUsd,
-      model: EMBEDDING_MODEL,
+      model,
     };
   }
 
@@ -159,8 +166,8 @@ export async function runReindexCode(
       skipped: 0,
       failed: 0,
       totalTokens: 0,
-      costUsd: 0,
-      model: EMBEDDING_MODEL,
+      costUsd: showUsd ? 0 : null,
+      model,
     };
   }
 
@@ -229,7 +236,7 @@ export async function runReindexCode(
     failed,
     totalTokens,
     costUsd,
-    model: EMBEDDING_MODEL,
+    model,
     failures: failures.length > 0 ? failures : undefined,
   };
 }
@@ -253,10 +260,13 @@ export async function runReindexCodeCli(engine: BrainEngine, args: string[]): Pr
     if (json) {
       console.log(JSON.stringify(result));
     } else {
+      const costLine =
+        result.costUsd !== null
+          ? `est. $${result.costUsd.toFixed(2)} on ${result.model}.`
+          : `USD cost estimate not available for this embedding provider (${result.model}).`;
       console.log(
         `reindex-code preview: ${result.codePages} code page(s), ` +
-          `~${result.totalTokens.toLocaleString()} tokens, ` +
-          `est. $${result.costUsd.toFixed(2)} on ${result.model}.`,
+          `~${result.totalTokens.toLocaleString()} tokens, ${costLine}`,
       );
       console.log('--dry-run: exit without reindexing.');
     }
@@ -266,15 +276,29 @@ export async function runReindexCodeCli(engine: BrainEngine, args: string[]): Pr
   // Cost preview + gate, before touching the DB.
   if (!noEmbed) {
     const preview = await estimateReindexCost(engine, sourceId, 100);
-    const costUsd = estimateEmbeddingCostUsd(preview.totalTokens);
+    const model = getActiveEmbeddingModel();
+    const showUsd = shouldShowOpenAiUsdCostEstimate();
+    const costUsd = showUsd ? estimateEmbeddingCostUsd(preview.totalTokens) : null;
+    const costTail =
+      showUsd && costUsd !== null
+        ? `est. $${costUsd.toFixed(2)} on ${model}.`
+        : `USD cost estimate not available for this embedding provider (${model}).`;
     const previewMsg =
       `reindex-code: ${preview.totalPages} code page(s), ` +
-      `~${preview.totalTokens.toLocaleString()} tokens, ` +
-      `est. $${costUsd.toFixed(2)} on ${EMBEDDING_MODEL}.`;
+      `~${preview.totalTokens.toLocaleString()} tokens, ${costTail}`;
 
     if (preview.totalPages === 0) {
       if (json) {
-        console.log(JSON.stringify({ status: 'ok', codePages: 0, reindexed: 0, skipped: 0, failed: 0, totalTokens: 0, costUsd: 0, model: EMBEDDING_MODEL }));
+        console.log(JSON.stringify({
+          status: 'ok',
+          codePages: 0,
+          reindexed: 0,
+          skipped: 0,
+          failed: 0,
+          totalTokens: 0,
+          costUsd: showUsd ? 0 : null,
+          model,
+        }));
       } else {
         console.log('No code pages to reindex.');
       }
@@ -290,7 +314,7 @@ export async function runReindexCodeCli(engine: BrainEngine, args: string[]): Pr
           message: previewMsg,
           hint: 'Pass --yes to proceed, or --dry-run to see the preview and exit 0.',
         }));
-        console.log(JSON.stringify({ error: envelope, preview, costUsd, model: EMBEDDING_MODEL }));
+        console.log(JSON.stringify({ error: envelope, preview, costUsd, model }));
         process.exit(2);
       }
       console.log(previewMsg);
@@ -309,7 +333,7 @@ export async function runReindexCodeCli(engine: BrainEngine, args: string[]): Pr
     console.log(
       `reindex-code: ${result.reindexed} reindexed, ${result.skipped} skipped, ${result.failed} failed ` +
         `(${result.codePages} total code pages, ~${result.totalTokens.toLocaleString()} tokens, ` +
-        `est. $${result.costUsd.toFixed(2)}).`,
+        (result.costUsd !== null ? `est. $${result.costUsd.toFixed(2)}).` : 'USD cost N/A).'),
     );
     if (result.failures && result.failures.length > 0) {
       console.log(`\n${result.failures.length} failure(s):`);
